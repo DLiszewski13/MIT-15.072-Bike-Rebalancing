@@ -50,17 +50,13 @@ df <- rides_201904 %>% mutate(starttime = as.POSIXct(starttime),
                               start.quarter = as.integer(start.time.of.day*4)/4,
                               .keep = "unused") %>%
   mutate(
-    start.time.interval = floor_date(starttime, "1h"),
     .after = "starttime"
   ) %>%
   mutate(
-    stop.time.interval = floor_date(stoptime, "1h"),
     .after= 'stoptime'
     )
 
 # Merging df with stations to get number of docks
-
-# **SHOULD BE DOWNGRADED WITH NUMBER OF DOCKS AT THE TIME OF OBSERVATIONS**
 
 stations = read.csv("current_bluebikes_stations.csv")
 colnames(stations) = stations[1,]
@@ -137,12 +133,10 @@ df.net.arrival <- df.departure %>%
         all.x = TRUE,
         all.y = TRUE
   ) %>%
-  rename(station.name = start.station.name) %>%
   merge(stations %>% select(-c(Number, total.rides)),
         by.x = 'station.name',
         by.y = 'Name',
         all.x = TRUE) %>%
-  mutate(net.arrival.rate = replace_na(number_of_arrival, 0) - replace_na(number.of.departures,0)) %>%
   arrange(station.id, start.time.interval)
 ```
 
@@ -193,11 +187,13 @@ ggplot(data=event.stations %>% filter(station.id == 149)) +
 ```{r}
 # Scatter plot by day - Change the name of the station
 name = "Kendall T"
+name = "Dana Park"
 
 ggplot(data=event.stations %>% filter(station.name == name) %>% 
          mutate(week.time = min+60*hour+1440*day.of.week)) +
   geom_line(aes(x = week.time, y=net.daily.arrivals, color = factor(day.of.month))) +
   geom_hline(aes(yintercept=as.numeric((stations %>% filter(Name == name))$docks)), color = "red") +
+  geom_hline(aes(yintercept=0*as.numeric((stations %>% filter(Name == name))$docks)), color = "red") +
   geom_hline(aes(yintercept=-as.numeric((stations %>% filter(Name == name))$docks)), color = "red") +
   theme_bw() +
   ylab("Cumulative net arrivals") +
