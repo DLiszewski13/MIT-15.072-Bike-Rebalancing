@@ -50,9 +50,11 @@ df <- rides_201904 %>% mutate(starttime = as.POSIXct(starttime),
                               start.quarter = as.integer(start.time.of.day*4)/4,
                               .keep = "unused") %>%
   mutate(
+    start.time.interval = floor_date(starttime, "15 min"),
     .after = "starttime"
   ) %>%
   mutate(
+    stop.time.interval = floor_date(stoptime, "15 min"),
     .after= 'stoptime'
     )
 
@@ -133,12 +135,77 @@ df.net.arrival <- df.departure %>%
         all.x = TRUE,
         all.y = TRUE
   ) %>%
+  rename(station.name = start.station.name)
+
+df.net.arrival <- df.net.arrival %>%
+  merge(crossing(
+    data.frame(station.names = unique(df.net.arrival$station.name)), 
+    data.frame(range.dates = seq(as.POSIXct('2019-04-01 00:00:00:0000'), 
+                                 as.POSIXct('2019-05-01 00:00:00:0000'), by = '15 min'))),
+        by.x = c('station.name', "start.time.interval"),
+        by.y = c('station.names', 'range.dates'),
+        all.x = TRUE,
+        all.y = TRUE) %>%
   merge(stations %>% select(-c(Number, total.rides)),
         by.x = 'station.name',
         by.y = 'Name',
         all.x = TRUE) %>%
+  mutate(number_of_arrival = replace_na(number_of_arrival,0),
+         number.of.departures = replace_na(number.of.departures,0),
+         net.arrival.rate = number_of_arrival - number.of.departures) %>%
   arrange(station.id, start.time.interval)
 ```
+
+```{r}
+## For empty stations
+df.net.arrival <- df.net.arrival %>% 
+  group_by(station.name) %>%
+  mutate(empty = 0) %>%
+  mutate(empty = case_when((lag(net.arrival.rate) <= -2) & (net.arrival.rate >= 0) & (net.arrival.rate <= 2) ~ 1,
+                           TRUE ~ 0)) %>%
+  ungroup()
+
+# Careful - this is long - I don't know how to make it faster
+# What I do is that I propagate the empty only one by one - trying a loop was way slower
+# 96 is for a day (1 day = 24 * 4 quarters = 96 quarters)
+for (i in 1:96){
+  df.net.arrival <- df.net.arrival %>%
+    group_by(station.name) %>%
+    mutate(empty = case_when((lag(empty) == 1) & (net.arrival.rate <= 1) & (net.arrival.rate >= -1) ~ 1,
+                             empty == 1 ~ 1,
+                             TRUE ~ 0))
+}
+
+## For full stations
+df.net.arrival <- df.net.arrival %>% 
+  group_by(station.name) %>%
+  mutate(full = 0) %>%
+  mutate(empty = case_when((lag(net.arrival.rate) >= 2) & (net.arrival.rate <= 0) & (net.arrival.rate >= -2) ~ 1,
+                           TRUE ~ 0)) %>%
+  ungroup()
+
+# Careful - this is long - I don't know how to make it faster
+for (i in 1:96){
+  df.net.arrival <- df.net.arrival %>%
+    group_by(station.name) %>%
+    mutate(full = case_when((lag(full) == 1) & (net.arrival.rate >= -1) & (net.arrival.rate <= 1) ~ 1,
+                             full == 1 ~ 1,
+                             TRUE ~ 0))
+}
+```
+
+```{r}
+view(df.net.arrival %>% filter(station.name == 'Dana Park'))
+```
+
+
+
+
+
+
+
+
+
 
 
 ## Computing the net evolution of number of bikes in a station during the day
@@ -186,13 +253,11 @@ ggplot(data=event.stations %>% filter(station.id == 149)) +
 
 ```{r}
 # Scatter plot by day - Change the name of the station
-name = "Kendall T"
 name = "Dana Park"
 
 ggplot(data=event.stations %>% filter(station.name == name) %>% 
          mutate(week.time = min+60*hour+1440*day.of.week)) +
   geom_line(aes(x = week.time, y=net.daily.arrivals, color = factor(day.of.month))) +
-  geom_hline(aes(yintercept=as.numeric((stations %>% filter(Name == name))$docks)), color = "red") +
   geom_hline(aes(yintercept=0*as.numeric((stations %>% filter(Name == name))$docks)), color = "red") +
   geom_hline(aes(yintercept=-as.numeric((stations %>% filter(Name == name))$docks)), color = "red") +
   theme_bw() +
