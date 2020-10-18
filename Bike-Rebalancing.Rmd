@@ -9,9 +9,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 # Set path to your work directory
-path_to_directory = '/Users/victorjouault/Desktop/MIT/Courses/15.072 - A. Edge/A. Edge Project/Data Bluebikes'
-setwd(path_to_directory)
-
 library(plyr)
 library(dplyr)
 library(tidyr)
