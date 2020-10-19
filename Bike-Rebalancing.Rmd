@@ -85,6 +85,11 @@ stations <- stations %>%
   arrange(desc(total.rides))
 ```
 
+```{r}
+quantile(df$tripduration, c(0.25,0.5,0.75, .9))
+```
+
+
 ## Top 10 stations
 
 ```{r}
