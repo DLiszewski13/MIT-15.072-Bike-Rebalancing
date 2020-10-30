@@ -1,3 +1,5 @@
 
 201904-bluebikes-tripdata.csv
 *.csv
+.ipynb_checkpoints/Weather-checkpoint.ipynb
+.Rhistory
