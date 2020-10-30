@@ -24,11 +24,19 @@ library(gbm)
 library(tibble)
 library(ROCR)
 library(shiny)
+library(leaflet)
+library(leaflet.minicharts)
+library(RColorBrewer)
+library(leaftime)
 ```
 
 # Clasic datasets
 
 ```{r}
+
+### Define the reference time interval the notebook uses
+time.int = '1h' # Could be for example '15 min'
+
 rides_201909 = read.csv("201909-bluebikes-tripdata.csv")
 # rides_201904 = read.csv("201904-bluebikes-tripdata.csv")
 # rides_201905 = read.csv("201905-bluebikes-tripdata.csv")
@@ -47,13 +55,17 @@ df <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
                               start.min = as.integer(format(starttime, "%M")),
                               start.time.of.day = start.hour + (start.min/60), 
                               start.quarter = as.integer(start.time.of.day*4)/4,
-                              .keep = "unused") %>%
+                              .keep = "unused",
+                              start.station.latitude = as.numeric(start.station.latitude),
+                              start.station.longitude = as.numeric(start.station.longitude),
+                              end.station.latitude = as.numeric(end.station.latitude),
+                              end.station.longitude = as.numeric(end.station.longitude)) %>%
   mutate(
-    start.time.interval = floor_date(starttime, "15 min"),
+    start.time.interval = floor_date(starttime, time.int),
     .after = "starttime"
   ) %>%
   mutate(
-    stop.time.interval = floor_date(stoptime, "15 min"),
+    stop.time.interval = floor_date(stoptime, time.int),
     .after= 'stoptime'
     )
 
@@ -61,7 +73,8 @@ df <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
 
 stations = read.csv("current_bluebikes_stations.csv")
 colnames(stations) = stations[1,]
-stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total docks')
+stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total docks') %>% 
+  mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
 glimpse(stations)
 df <- df %>%
     merge(stations %>% select(Name, docks),
@@ -100,16 +113,13 @@ stations %>% head(10)
 ```
 
 ## Visualizing number of rides
+
 ```{r}
 df_count_rides <- df %>% filter(start.day.of.month <= 28) %>%
   group_by(start.quarter, start.day.of.week) %>%
   summarise(number.of.rides = n()) %>%
   ungroup()
 
-summary(df_count_rides)
-```
-
-```{r}
 # Scatter plot by day of week
 ggplot(data=df_count_rides,aes(x=start.quarter)) +
   geom_point(aes(y=number.of.rides, color=factor(start.day.of.week)),size=.5) +
@@ -144,16 +154,37 @@ df.net.arrival <- df.departure %>%
 
 df.net.arrival <- df.net.arrival %>%
   complete(start.time.interval = seq(as.POSIXct('2019-09-01 00:00:00:0000'), 
-                                     as.POSIXct('2019-10-01 00:00:00:0000'), by = '15 min'), station.name) %>%
+                                     as.POSIXct('2019-10-01 00:00:00:0000'), by = '1 hour'), station.name) %>%
   merge(stations %>% select(-c(Number, total.rides)),
         by.x = 'station.name',
         by.y = 'Name',
         all.x = TRUE) %>%
-  mutate(number_of_arrival = replace_na(number_of_arrival,0),
+  mutate(start.day.of.month = as.integer(format(start.time.interval, "%d")),
+         number_of_arrival = replace_na(number_of_arrival,0),
          number.of.departures = replace_na(number.of.departures,0),
          net.arrival.rate = number_of_arrival - number.of.departures) %>%
-  arrange(station.name, start.time.interval)
+  arrange(station.name, start.time.interval) %>%
+  group_by(station.name, start.day.of.month) %>%
+  mutate(cum.net.arrival = cumsum(net.arrival.rate)) %>%
+  ungroup()
 ```
+
+```{r}
+ggplot(data=df.net.arrival %>% filter(station.name == '175 N Harvard St')) +
+  geom_line(aes(x =start.time.interval, y=cum.net.arrival, color = factor(start.day.of.month))) +
+  theme_bw() +
+  ylab("Cumulative net arrivals") +
+  theme(axis.title=element_text(size=10), axis.text=element_text(size=10), legend.title=element_text(size=10),
+        legend.text=element_text(size=12))
+```
+
+
+
+
+
+
+
+# Heuristic on full/empty stations -- Not sure if this is useful anymore
 
 ```{r}
 ### Heuristic for empty/full stations
@@ -248,7 +279,7 @@ event.stations = start.event.stations %>%
 
 ```{r}
 # Scatter plot by day
-ggplot(data=event.stations %>% filter(station.name == 'Kendall T')) +
+ggplot(data=event.stations %>% filter(station.name == '175 N Harvard St')) +
   geom_line(aes(x =time, y=net.daily.arrivals, color = factor(day.of.month))) +
   theme_bw() +
   ylab("Cumulative net arrivals") +
@@ -297,7 +328,7 @@ for (name in station.names) {
 
 ```{r}
 ### Current time.interval of 1h
-network_flows <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
+network.flows <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
                               stoptime = as.POSIXct(stoptime),
                               gender = as.factor(gender),
                               start.year = as.integer(format(starttime, "%Y")),
@@ -310,39 +341,57 @@ network_flows <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
                               start.quarter = as.integer(start.time.of.day*4)/4,
                               .keep = "unused") %>%
   mutate(                                                                     # Intervals of 1h
-    start.time.interval = floor_date(starttime, "1h"),
+    start.time.interval = floor_date(starttime, time.int),
     .after = "starttime"
   ) %>%
   mutate(
-    stop.time.interval = floor_date(stoptime, "1h"),
+    stop.time.interval = floor_date(stoptime, time.int),
     .after= 'stoptime'
     ) %>%
   group_by(start.station.name, end.station.name, start.time.interval) %>%
   summarise(hourly.dep.flow = n()) %>%                                        # Now adding departure_flow
-  merge(stations %>% select(Name, docks),                                     # Adding number of docks per station
+  merge(stations %>% select(Name, docks, Latitude, Longitude),                # Adding number of docks per station
         by.x = 'start.station.name',
         by.y = 'Name',
         suffixes = c('','.start'), all.x = TRUE) %>%
-  merge(stations %>% select(Name, docks),
+  merge(stations %>% select(Name, docks, Latitude, Longitude),
         by.x = 'end.station.name',
         by.y = 'Name',
         suffixes = c('','.end'), all.x = TRUE) %>%
-  rename(start.docks = docks, end.docks = docks.end) %>%
+  rename(start.docks = docks, end.docks = docks.end, start.latitude = Latitude, start.longitude = Longitude,
+         end.latitude = Latitude.end, end.longitude = Longitude.end) %>%
   arrange(start.station.name, start.time.interval, end.station.name) %>%
   group_by(start.station.name, start.time.interval) %>%                       # Now adding total_flows
   mutate(hourly.dep.flow.total = sum(hourly.dep.flow)) %>%
   ungroup() %>%
   mutate(hourly.dep.flow.pct = hourly.dep.flow / hourly.dep.flow.total)
   ## If needed, add missing time interval and stations and populate with 0 network flows.
-
-view(network_flows)
 ```
 
-Understand the life of one bike for a day.
-Let's say I start from Central.
-At each hour, I look
+Next step: Visualization
 
-### Other idea: bottom-up approach
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Determine where do bike go from the beginning to the end of the day.
 
 ```{r}
 # There are 'only' 3496 bikes for 300ish stations - 10 bikes per station
@@ -360,17 +409,237 @@ I want, for each bike in the dataset:
 
 * the station it arrived in the evening and time associated
 
+
+**Suggestion: Start the day at 3am instead of starting it at midnight -- shouldn't change much.**
+
 ```{r}
-# First let's look at May 1st, 2019
-first.day <- df %>% filter(start.day.of.month == 1) %>% arrange(starttime)
+# Just the definition of the function
 
-for (bike in bikes){
-  for (row in 1:nrow(first.day)){
-    # date  <- stock[row, "date"]
-    
+daily.bike.trips = function(day.of.month, df) {
+  day <- df %>% filter(start.day.of.month == day.of.month) %>% arrange(starttime)
+  len = length(unique(df$bikeid))
+  bike.trips = data.frame(bikeid = unique(df$bikeid), start.station.name = character(len), start.time = POSIXct(len), 
+                        end.station.name = character(len), end.time = POSIXct(len))
+  
+  start = Sys.time()
+  
+  row.names(bike.trips) = bike.trips$bikeid
+  
+  for (row in 1:nrow(day)){
+    bike = as.character(day[row, "bikeid"])
+      if (bike.trips[bike,"start.station.name"] == ""){
+        bike.trips[bike, "start.station.name"] <- day[row, "start.station.name"]
+        bike.trips[bike, "start.time"] <- day[row, "starttime"]
+        bike.trips[bike, "end.station.name"] <- day[row, "end.station.name"]
+        bike.trips[bike, "end.time"] <- day[row, "stoptime"]
+      }
+      else{
+        bike.trips[bike, "end.station.name"] <- day[row, "end.station.name"]
+        bike.trips[bike, "end.time"] <- day[row, "stoptime"]
+      }
   }
+  
+  bike.trips <- bike.trips %>% filter(!(start.station.name == ""))
+  
+  bike.trips <- bike.trips %>% mutate(day.of.month = day.of.month)
+  
+  difftime(Sys.time(), start)
+  
+  return(bike.trips)
 }
+```
 
+
+So, we have some data on where the bikes actually go from the beginning of the day to the end of the day.
+
+```{r}
+### CAREFUL -- GO DIRECTLY NEXT CELL, WHERE RESULT IS LOADED -- this function actually take 6' to run !!
+
+# day.bike.trips = daily.bike.trips(1, df)
+# 
+# for (day.of.month in 2:28){
+#   trips = daily.bike.trips(2, df)
+#   day.bike.trips = rbind(day.bike.trips, trips)
+# }
+# 
+# save(day.bike.trips, file="daybiketrips.RDA")
+```
+
+
+WE CAN DIRECTLY LOAD THE DATAFRAME HERE
+```{r}
+load("daybiketrips.RDA") # Creates the bike.trips data.frame
+
+# Get latitude and longitude of start and end stations
+day.bike.trips <- day.bike.trips  %>%  
+  merge(stations %>% select(Name, docks, Latitude, Longitude),                # Adding lat/long/number of docks
+        by.x = 'start.station.name',
+        by.y = 'Name',
+        suffixes = c('','.start'), all.x = TRUE) %>%
+  merge(stations %>% select(Name, docks, Latitude, Longitude),
+        by.x = 'end.station.name',
+        by.y = 'Name',
+        suffixes = c('','.end'), all.x = TRUE) %>%
+  rename(start.docks = docks, end.docks = docks.end, start.latitude = Latitude, start.longitude = Longitude,
+         end.latitude = Latitude.end, end.longitude = Longitude.end)
+
+### CAREFUL: We have a few NaNs because station names don't perfectly match -- Don't know why ...
+```
+
+
+```{r}
+## Exploring it from here
+top.bike.departure <- day.bike.trips %>%
+  group_by(start.station.name, start.latitude, start.longitude) %>%
+  summarise(n.bikes.dep = n()) %>%
+  ungroup() %>%
+  arrange(desc(n.bikes.dep)) %>%
+  mutate(lat = as.numeric(start.latitude), long = as.numeric(start.longitude))
+
+top.bike.arrival <- day.bike.trips %>%
+  group_by(end.station.name, end.latitude, end.longitude) %>%
+  summarise(n.bikes.arr = n()) %>%
+  ungroup() %>%
+  arrange(desc(n.bikes.arr)) %>%
+  mutate(lat = as.numeric(end.latitude), long = as.numeric(end.longitude)) %>%
+  select(-c(end.latitude, end.longitude))
+
+cum.bike.dep.arr <- top.bike.arrival %>%
+  merge(top.bike.departure %>% select('start.station.name', 'n.bikes.dep'),
+        by.x = 'end.station.name',
+        by.y = 'start.station.name') %>%
+  rename(station = end.station.name,)
+```
+
+```{r}
+top.bike.departure %>% head(10)
+
+top.bike.arrival %>% head(10)
+
+cum.bike.dep.arr %>% head(10)
+```
+
+Next step is a visualization step: plot stations on the map as well as many different characteristics about this station.
+
+# Visualization
+
+```{r}
+pal <- colorFactor(c("orange", "blue"), domain = c("n.bikes.arr", "n.bikes.dep"))
+
+cum.bike.dep.arr <- cum.bike.dep.arr %>%
+  gather(key = 'key', value = 'value', c(n.bikes.dep, n.bikes.arr))
+
+m <- leaflet(cum.bike.dep.arr) %>%
+  setView(lng = -71.0589, lat = 42.3601, zoom = 12) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers(
+    radius = ~value/60,
+    color = ~pal(key),
+    opacity = ~.5,
+    popup = ~station
+  ) %>%
+  addLegend("bottomright", pal = pal, values = ~key,
+    title = "Morning departure/Evening arrival",
+    labels = c('Total number of bikes that started one day in station', 'Total number of bikes that finished one day in station'),
+    opacity = 1
+  )
+m
+```
+
+```{r}
+
+## The following was a first try -- does not work in the end -- don't know why
+
+# net.plot <- network.flows %>% filter(start.time.interval == time.interval) %>% drop_na()
+# net.plot <- gcIntermediate(net.plot[,c('start.longitude','start.latitude')], 
+#                            net.plot[,c('end.longitude','end.latitude')])
+# net.plot$dep <- network.flows$hourly.dep.flow
+# net.plot$start.station <- network.flows$start.station.name
+# net.plot$end.station <- network.flows$end.station.name
+# 
+# hover <- paste0(net.plot$start.station, " to ", 
+#                 net.plot$end.station, ': ', 
+#                 as.character(net.plot$dep))
+
+## I added this to network map ::
+# %>%
+#   addPolylines(data = net.plot, weight = ~dep, label = hover,
+#                group = ~start.station.name, color = ~pal3(start.station.name))
+
+
+### AAAH I don't know how to add lines between circles -- I abandon for now -- Was trying with netplot2
+
+time.interval = '2019-09-02 16:00:00.0000'
+time.interval = floor_date(as.POSIXct(time.interval), time.int)
+
+pal2 <- colorFactor(c("orange", "navy"), domain = c("number_of_arrival", "number.of.departures"))
+
+net.plot2 <- network.flows %>% filter(start.time.interval == time.interval)
+net.plot2$id <- rownames(net.plot2)
+net.plot2 <- data.frame(id = net.plot2$id,
+                        weight = net.plot2$hourly.dep.flow,
+                        lat = c(net.plot2$start.latitude, net.plot2$end.latitude), 
+                        long = c(net.plot2$start.longitude, net.plot2$end.longitude))
+
+pal3 <- colorFactor(brewer.pal(10, 'Set2'), stations$Name)
+
+network_map <- leaflet() %>%
+  setView(lng = -71.0589, lat = 42.3601, zoom = 12) %>% # On Boston
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers(
+    data = df.net.arrival %>% gather(key = 'key', value = 'value', c(number.of.departures, number_of_arrival)) %>%
+      filter(start.time.interval == time.interval),
+    lng = ~as.numeric(Longitude),
+    lat = ~as.numeric(Latitude),
+    radius = ~value,
+    color = ~pal2(key),
+    opacity = ~.5,
+    popup = ~station.name
+  ) # %>%
+  # addPolylines(data = net.plot2, weight = ~weight,
+  #              group = ~id, color = ~pal3(start.station.name))
+network_map
+
+```
+
+```{r}
+## Tentative to add a timeline -- not successful
+
+# Input
+day = 2
+
+pal2 <- colorFactor(c("orange", "navy"), domain = c("number_of_arrival", "number.of.departures"))
+
+net.plot2 <- network.flows %>% filter(as.integer(format(start.time.interval, "%d")) == day)
+net.plot2$id <- rownames(net.plot2)
+net.plot2 <- data.frame(id = net.plot2$id,
+                        weight = net.plot2$hourly.dep.flow,
+                        time.interval = net.plot2$start.time.interval,
+                        lat = c(net.plot2$start.latitude, net.plot2$end.latitude), 
+                        long = c(net.plot2$start.longitude, net.plot2$end.longitude))
+
+library(geojsonio)
+plot3 <- geojsonio::geojson_json(df.net.arrival %>% 
+                                   gather(key = 'key', value = 'value', c(number.of.departures, number_of_arrival)) %>%
+                                   filter(as.integer(format(start.time.interval, "%d")) == day) %>%
+                                   drop_na() %>%
+                                   mutate(start = start.time.interval, end = start.time.interval + 60*60),
+                         lat="Latitude",lon="Longitude", )
+
+
+network_map <- leaflet(plot3) %>%
+  setView(lng = -71.0589, lat = 42.3601, zoom = 12) %>% # On Boston
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers(
+    lng = ~as.numeric(Longitude),
+    lat = ~as.numeric(Latitude),
+    radius = ~value,
+    color = ~pal2(key),
+    opacity = ~.5,
+    popup = ~station.name
+  ) %>%
+  addTimeline()
+network_map
 ```
 
 
@@ -385,8 +654,35 @@ for (bike in bikes){
 
 
 
+```{r}
+r_colors <- rgb(t(col2rgb(colors()) / 255))
+names(r_colors) <- colors()
 
+ui <- fluidPage(
+  leafletOutput("mymap"),
+  p(),
+  # actionButton("recalc", "New points")
+)
 
+server <- function(input, output, session) {
+
+  
+
+  output$mymap <- renderLeaflet({
+    leaflet(cum.bike.dep.arr) %>%
+      setView(lng = -71.0589, lat = 42.3601, zoom = 12) %>%
+      addProviderTiles(providers$CartoDB.Positron) %>%
+          addCircleMarkers(
+            radius = ~value/75,
+            color = ~pal(key),
+            opacity = ~.5,
+            popup = ~station
+      )
+  })
+}
+
+shinyApp(ui, server)
+```
 
 
 
@@ -483,6 +779,8 @@ ggplot(data=train %>% filter(day.of.week == 5),aes(x=time.of.day)) +
   scale_color_brewer(name='Weekday',labels=c('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), palette="Set1")
 ```
 
+
+
 ```{r}
 # This next cell is old stuff
 
@@ -510,6 +808,3 @@ ggplot(data=train %>% filter(day.of.week == 5),aes(x=time.of.day)) +
 #          cum.arrival = cumsum(replace_na(end.ind,0))) %>%
 #   mutate(net.cum.arrivals = cum.arrival - cum.departure)
 ```
-
-
-
