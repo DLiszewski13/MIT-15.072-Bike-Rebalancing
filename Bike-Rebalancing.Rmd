@@ -23,18 +23,20 @@ library(leaps)
 library(gbm)
 library(tibble)
 library(ROCR)
+library(shiny)
 ```
 
 # Clasic datasets
 
 ```{r}
-rides_201904 = read.csv("201904-bluebikes-tripdata.csv")
+rides_201909 = read.csv("201909-bluebikes-tripdata.csv")
+# rides_201904 = read.csv("201904-bluebikes-tripdata.csv")
 # rides_201905 = read.csv("201905-bluebikes-tripdata.csv")
 # rides_201906 = read.csv("201906-bluebikes-tripdata.csv")
 # rides_201907 = read.csv("201907-bluebikes-tripdata.csv")
 # rides_201908 = read.csv("201908-bluebikes-tripdata.csv")
 
-df <- rides_201904 %>% mutate(starttime = as.POSIXct(starttime),
+df <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
                               stoptime = as.POSIXct(stoptime),
                               gender = as.factor(gender),
                               start.year = as.integer(format(starttime, "%Y")),
@@ -81,7 +83,8 @@ stations <- stations %>%
   merge(df %>% select(station.name = start.station.name, station.id = start.station.id) %>%
           group_by(station.name, station.id) %>% summarise(total.rides = n()),
         by.x = 'Name',
-        by.y = 'station.name') %>%
+        by.y = 'station.name',
+        all.x = TRUE) %>%
   arrange(desc(total.rides))
 ```
 
@@ -140,14 +143,8 @@ df.net.arrival <- df.departure %>%
   rename(station.name = start.station.name)
 
 df.net.arrival <- df.net.arrival %>%
-  merge(crossing(
-    data.frame(station.names = unique(df.net.arrival$station.name)), 
-    data.frame(range.dates = seq(as.POSIXct('2019-04-01 00:00:00:0000'), 
-                                 as.POSIXct('2019-05-01 00:00:00:0000'), by = '15 min'))),
-        by.x = c('station.name', "start.time.interval"),
-        by.y = c('station.names', 'range.dates'),
-        all.x = TRUE,
-        all.y = TRUE) %>%
+  complete(start.time.interval = seq(as.POSIXct('2019-09-01 00:00:00:0000'), 
+                                     as.POSIXct('2019-10-01 00:00:00:0000'), by = '15 min'), station.name) %>%
   merge(stations %>% select(-c(Number, total.rides)),
         by.x = 'station.name',
         by.y = 'Name',
@@ -155,15 +152,20 @@ df.net.arrival <- df.net.arrival %>%
   mutate(number_of_arrival = replace_na(number_of_arrival,0),
          number.of.departures = replace_na(number.of.departures,0),
          net.arrival.rate = number_of_arrival - number.of.departures) %>%
-  arrange(station.id, start.time.interval)
+  arrange(station.name, start.time.interval)
 ```
 
 ```{r}
+### Heuristic for empty/full stations
+# Play on parameters to have something more smooth!!!
+
+# Huge problem: Some time slots are both empty and nonempty.
+
 ## For empty stations
 df.net.arrival <- df.net.arrival %>% 
   group_by(station.name) %>%
   mutate(empty = 0) %>%
-  mutate(empty = case_when((lag(net.arrival.rate) <= -2) & (net.arrival.rate >= 0) & (net.arrival.rate <= 2) ~ 1,
+  mutate(empty = case_when((lag(net.arrival.rate) <= -2) & (net.arrival.rate >= -1) & (net.arrival.rate <= 2) ~ 1,
                            TRUE ~ 0)) %>%
   ungroup()
 
@@ -182,7 +184,7 @@ for (i in 1:96){
 df.net.arrival <- df.net.arrival %>% 
   group_by(station.name) %>%
   mutate(full = 0) %>%
-  mutate(empty = case_when((lag(net.arrival.rate) >= 2) & (net.arrival.rate <= 0) & (net.arrival.rate >= -2) ~ 1,
+  mutate(full = case_when((lag(net.arrival.rate) >= 2) & (net.arrival.rate <= 1) & (net.arrival.rate >= -2) ~ 1,
                            TRUE ~ 0)) %>%
   ungroup()
 
@@ -197,7 +199,7 @@ for (i in 1:96){
 ```
 
 ```{r}
-view(df.net.arrival %>% filter(station.name == 'Dana Park'))
+view(df.net.arrival %>% filter(station.name == 'Kendall T'))
 ```
 
 
@@ -246,7 +248,7 @@ event.stations = start.event.stations %>%
 
 ```{r}
 # Scatter plot by day
-ggplot(data=event.stations %>% filter(station.id == 149)) +
+ggplot(data=event.stations %>% filter(station.name == 'Kendall T')) +
   geom_line(aes(x =time, y=net.daily.arrivals, color = factor(day.of.month))) +
   theme_bw() +
   ylab("Cumulative net arrivals") +
@@ -291,9 +293,85 @@ for (name in station.names) {
 }
 ```
 
+## Network flows through the day
 
+```{r}
+### Current time.interval of 1h
+network_flows <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
+                              stoptime = as.POSIXct(stoptime),
+                              gender = as.factor(gender),
+                              start.year = as.integer(format(starttime, "%Y")),
+                              start.month = as.integer(format(starttime, "%m")),
+                              start.day.of.month = as.integer(format(starttime, "%d")),
+                              start.day.of.week = as.integer(format(starttime, "%w")),
+                              start.hour = as.integer(format(starttime, "%H")),
+                              start.min = as.integer(format(starttime, "%M")),
+                              start.time.of.day = start.hour + (start.min/60), 
+                              start.quarter = as.integer(start.time.of.day*4)/4,
+                              .keep = "unused") %>%
+  mutate(                                                                     # Intervals of 1h
+    start.time.interval = floor_date(starttime, "1h"),
+    .after = "starttime"
+  ) %>%
+  mutate(
+    stop.time.interval = floor_date(stoptime, "1h"),
+    .after= 'stoptime'
+    ) %>%
+  group_by(start.station.name, end.station.name, start.time.interval) %>%
+  summarise(hourly.dep.flow = n()) %>%                                        # Now adding departure_flow
+  merge(stations %>% select(Name, docks),                                     # Adding number of docks per station
+        by.x = 'start.station.name',
+        by.y = 'Name',
+        suffixes = c('','.start'), all.x = TRUE) %>%
+  merge(stations %>% select(Name, docks),
+        by.x = 'end.station.name',
+        by.y = 'Name',
+        suffixes = c('','.end'), all.x = TRUE) %>%
+  rename(start.docks = docks, end.docks = docks.end) %>%
+  arrange(start.station.name, start.time.interval, end.station.name) %>%
+  group_by(start.station.name, start.time.interval) %>%                       # Now adding total_flows
+  mutate(hourly.dep.flow.total = sum(hourly.dep.flow)) %>%
+  ungroup() %>%
+  mutate(hourly.dep.flow.pct = hourly.dep.flow / hourly.dep.flow.total)
+  ## If needed, add missing time interval and stations and populate with 0 network flows.
 
+view(network_flows)
+```
 
+Understand the life of one bike for a day.
+Let's say I start from Central.
+At each hour, I look
+
+### Other idea: bottom-up approach
+
+```{r}
+# There are 'only' 3496 bikes for 300ish stations - 10 bikes per station
+bikes = unique(df$bikeid)
+length(unique(df$bikeid))
+```
+
+Look at each bike id throughout the day, where it started and to where is his last trip. Thera are 'only' 3496 different bikes in our dataset.
+
+I want, for each bike in the dataset:
+
+* the station it departed from first time and time associated
+
+* I don't exactly care about the stations it goes through, however I could try to look at the number of stations
+
+* the station it arrived in the evening and time associated
+
+```{r}
+# First let's look at May 1st, 2019
+first.day <- df %>% filter(start.day.of.month == 1) %>% arrange(starttime)
+
+for (bike in bikes){
+  for (row in 1:nrow(first.day)){
+    # date  <- stock[row, "date"]
+    
+  }
+}
+
+```
 
 
 
