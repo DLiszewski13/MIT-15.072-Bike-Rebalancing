@@ -30,6 +30,72 @@ library(RColorBrewer)
 library(leaftime)
 ```
 
+# Weather data
+
+We are interested in: 
+
+* tmpf: Air temperature in Fahrenheit
+
+* relh: Relative humidity in %
+
+* drct: Wind direction
+
+* sknt: Wind speed in knots
+
+* p01i: Precipitation during the last hour
+
+* alti: Pressure altimeter
+
+* vsby: Visibility in miles
+
+* gust: Wind gust in knots
+
+* ice_accretion_6hr: Ice accretion over 6 hours (inches)
+
+* feel: Apparent temperature in Fahrenheit
+
+May question whether or not it's good to keep both tmpf and feel -- will see in the model.
+
+What about clouds too??? Will have to dig on that!
+
+
+I also group observations by 6h time period (00-6, 6-12, 12-18, 18-00).
+
+```{r}
+wthr.int = "6h"
+wthr = read.csv("BOS_weather.csv") %>%
+  select(valid, tmpf, relh, drct, sknt, p01i, alti, vsby, gust, ice_accretion_6hr, feel) %>%
+  mutate(valid = as.POSIXct(valid),
+         time.interval = floor_date(valid, wthr.int),
+         .after = "valid") %>%
+  rename(time = valid)
+
+wthr = wthr %>% group_by(time.interval) %>%
+  summarise(avg.temp = mean(tmpf, na.rm = TRUE),
+            avg.hmd = mean(relh, na.rm = TRUE),
+            avg.drct = mean(drct, na.rm = TRUE),
+            avg.wind = mean(sknt, na.rm = TRUE),
+            sum.pcpt = sum(p01i, na.rm = TRUE), 
+            avg.press = mean(alti, na.rm = TRUE),
+            avg.vis = mean(vsby, na.rm = TRUE),
+            max.gust = max(gust, na.rm = TRUE),
+            avg.ice.6h = mean(ice_accretion_6hr, na.rm = TRUE),
+            avg.feel = mean(feel, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(max.gust = ifelse(max.gust < 0,avg.wind, max.gust),
+         avg.ice.6h = ifelse(is.na(avg.ice.6h), 0, avg.ice.6h))
+
+wthr %>%
+  mutate(avg.feel = ifelse(is.na(avg.feel), lag(avg.feel), avg.feel)) %>%
+  select(everything()) %>% 
+  summarise_all(funs(sum(is.na(.))))
+
+# I could try to do that just a few time. Or I observe that most NaNs are in from August up to end of year ... Or else I could just remove this column but I would feel it's pretty important 
+# I think it's worth looking at it with and without this variable. Way to impute this value could be to regress it based on actual temperature, wind and humidity. However it may also be redundant with other variables.
+```
+
+This looks good!
+
 # Clasic datasets
 
 ```{r}
@@ -605,6 +671,9 @@ network_map
 ```{r}
 ## Tentative to add a timeline -- not successful
 
+## Could use that to create a shiny app
+# https://towardsdatascience.com/eye-catching-animated-maps-in-r-a-simple-introduction-3559d8c33be1
+
 # Input
 day = 2
 
@@ -683,6 +752,39 @@ server <- function(input, output, session) {
 
 shinyApp(ui, server)
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
