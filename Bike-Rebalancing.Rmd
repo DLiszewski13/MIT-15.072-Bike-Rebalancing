@@ -434,7 +434,25 @@ network.flows <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
   ## If needed, add missing time interval and stations and populate with 0 network flows.
 ```
 
-Next step: Visualization
+# Distance traveled by bikes
+
+```{r}
+library(geosphere)
+df <- df %>% rowwise() %>%
+  mutate(distance = distm(c(start.station.longitude, start.station.latitude), 
+                                c(end.station.longitude, end.station.latitude), fun = distHaversine)) %>%
+  ungroup() %>%
+  mutate(distance = distance / 1609)
+```
+
+```{r}
+bike_dist <- df %>%
+  group_by(bikeid, start.year, start.day.of.month) %>%
+  summarise(tot.dist.day =sum(distance)) %>%
+  ungroup()
+
+quantile(bike_dist$tot.dist.day, c(0.25,0.5,0.75, .95, .99))
+```
 
 
 
