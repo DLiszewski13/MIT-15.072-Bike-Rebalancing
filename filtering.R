@@ -1,9 +1,79 @@
+#### Libraries ####
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(lubridate)
+library(magrittr)
+library(ggplot2)
+library(caret)
+library(glmnet)
+library(lars)
+library(leaps)
+library(gbm)
+library(tibble)
+library(ROCR)
+library(shiny)
+library(leaflet)
+library(leaflet.minicharts)
+library(RColorBrewer)
+library(leaftime)
+
+#### Defining objects
+path_to_directory <- "//Users/victorjouault/Desktop/MIT/Courses/15.072 - A. Edge/A. Edge Project/MIT-15.072-Bike-Rebalancing"
+setwd(path_to_directory)
+rides_201909 = read.csv("201909-bluebikes-tripdata.csv")
+time.int = '1h' # Could be for example '15 min'
+
 #### Filtering Datset Work ####
 
-df <- df %>% 
-  mutate(tripduration.mins = tripduration/60) %>%
+# Loading station dataset
+
+stations = read.csv("current_bluebikes_stations.csv")
+colnames(stations) = stations[1,]
+stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total docks') %>% 
+  mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
+glimpse(stations)
+
+df <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
+                              stoptime = as.POSIXct(stoptime),
+                              gender = as.factor(gender),
+                              start.year = as.integer(format(starttime, "%Y")),
+                              start.month = as.integer(format(starttime, "%m")),
+                              start.day.of.month = as.integer(format(starttime, "%d")),
+                              start.day.of.week = as.integer(format(starttime, "%w")),
+                              start.hour = as.integer(format(starttime, "%H")),
+                              start.min = as.integer(format(starttime, "%M")),
+                              start.time.of.day = start.hour + (start.min/60), 
+                              start.quarter = as.integer(start.time.of.day*4)/4,
+                              .keep = "unused",
+                              start.station.latitude = as.numeric(start.station.latitude),
+                              start.station.longitude = as.numeric(start.station.longitude),
+                              end.station.latitude = as.numeric(end.station.latitude),
+                              end.station.longitude = as.numeric(end.station.longitude)) %>%
+  mutate(
+    start.time.interval = floor_date(starttime, time.int),
+    .after = "starttime"
+  ) %>%
+  mutate(
+    stop.time.interval = floor_date(stoptime, time.int),
+    .after= 'stoptime'
+  ) %>% 
+  mutate(tripduration.mins = tripduration/60) %>%     # David: needed for the algo
   # Takes the ceiling of trip duration to get integer values
-  mutate(tripduration.mins.int = ceiling(tripduration.mins))
+  mutate(tripduration.mins.int = ceiling(tripduration.mins)) %>%
+  merge(stations %>% select(Name, docks),                        # To get number of docks if necessary
+        by.x = 'end.station.name',
+        by.y = 'Name',
+        suffixes = c('','.end'), all.x = TRUE) %>%
+  merge(stations %>% select(Name, docks),
+        by.x = 'start.station.name',
+        by.y = 'Name',
+        suffixes = c('','.start'), all.x = TRUE) %>%
+  mutate(docks.start= as.numeric(docks.start),
+         docks.end = as.numeric(docks),
+         .keep = 'unused'
+  )
 
 # Function to filter dataset to make data more representative of scooter demand
 # allows for many filtrations, up to user on which to include.
@@ -124,4 +194,46 @@ df.fil <- full_join(df.fil, df.fil6)
 
 # Percentage of data filtered out
 nrow(df.fil) / nrow(df)
+
+
+
+
+
+
+
+
+
+
+########################################################### Victor Update
+
+# Here: Aggregate stations by clusters
+
+
+
+# Computing network flows from the above
+
+df.fil <-df.fil  %>%
+  group_by(start.station.name, end.station.name, start.time.interval) %>%
+  summarise(hourly.dep.flow = n()) %>%                                        # Now adding departure_flow
+  merge(stations %>% select(Name, docks, Latitude, Longitude),                # Adding number of docks per station
+        by.x = 'start.station.name',
+        by.y = 'Name',
+        suffixes = c('','.start'), all.x = TRUE) %>%
+  merge(stations %>% select(Name, docks, Latitude, Longitude),
+        by.x = 'end.station.name',
+        by.y = 'Name',
+        suffixes = c('','.end'), all.x = TRUE) %>%
+  rename(start.docks = docks, end.docks = docks.end, start.latitude = Latitude, start.longitude = Longitude,
+         end.latitude = Latitude.end, end.longitude = Longitude.end) %>%
+  arrange(start.station.name, start.time.interval, end.station.name) %>%
+  group_by(start.station.name, start.time.interval) %>%                       # Now adding total_flows
+  mutate(hourly.dep.flow.total = sum(hourly.dep.flow)) %>%
+  ungroup() %>%
+  mutate(hourly.dep.flow.pct = hourly.dep.flow / hourly.dep.flow.total) %>%
+  complete(start.time.interval = seq(as.POSIXct('2019-09-01 00:00:00:0000'), 
+                                     as.POSIXct('2019-10-01 00:00:00:0000'), by = time.int), 
+           start.station.name, end.station.name)
+
+
+
 

@@ -96,6 +96,9 @@ wthr %>%
 
 This looks good!
 
+
+
+
 # Clasic datasets
 
 ```{r}
@@ -430,9 +433,21 @@ network.flows <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
   group_by(start.station.name, start.time.interval) %>%                       # Now adding total_flows
   mutate(hourly.dep.flow.total = sum(hourly.dep.flow)) %>%
   ungroup() %>%
-  mutate(hourly.dep.flow.pct = hourly.dep.flow / hourly.dep.flow.total)
-  ## If needed, add missing time interval and stations and populate with 0 network flows.
+  mutate(hourly.dep.flow.pct = hourly.dep.flow / hourly.dep.flow.total) %>%
+  complete(start.time.interval = seq(as.POSIXct('2019-09-01 00:00:00:0000'), 
+                                     as.POSIXct('2019-10-01 00:00:00:0000'), by = time.int), 
+           start.station.name, end.station.name) ## Maybe better to complete after we aggregate the data!
 ```
+
+```{r}
+# Extract for Ani
+extc <- network.flows %>% filter(start.station.name %in% c("Kendall T", "MIT Pacific St at Purrington St", "Beacon St at Massachusetts Ave", "MIT Vassar St") & end.station.name %in% c("Kendall T", "MIT Pacific St at Purrington St", "Beacon St at Massachusetts Ave", "MIT Vassar St"))
+
+write.csv(extc,'Ani_extract.csv')
+```
+
+
+
 
 # Distance traveled by bikes
 
@@ -604,6 +619,12 @@ cum.bike.dep.arr %>% head(10)
 ```
 
 Next step is a visualization step: plot stations on the map as well as many different characteristics about this station.
+
+
+
+
+
+
 
 # Visualization
 
