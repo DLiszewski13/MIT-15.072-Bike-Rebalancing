@@ -1,5 +1,12 @@
 #### Filtering Datset Work ####
 
+setwd("/Users/David/Dropbox (MIT)/bluebikes/MIT-15.072-Bike-Rebalancing")
+
+# Filtering stations to boston or cambridge
+stations %>% 
+  filter(District == "Boston" | District == "Cambridge") %>%
+  summarise(n())
+
 df <- df %>% 
   mutate(tripduration.mins = tripduration/60) %>%
   # Takes the ceiling of trip duration to get integer values
