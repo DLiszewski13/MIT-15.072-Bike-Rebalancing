@@ -78,23 +78,22 @@ wthr = wthr %>% group_by(time.interval) %>%
             sum.pcpt = sum(p01i, na.rm = TRUE), 
             avg.press = mean(alti, na.rm = TRUE),
             avg.vis = mean(vsby, na.rm = TRUE),
-            max.gust = max(gust, na.rm = TRUE),
+            max.gust = max(gust, na.rm = TRUE), # The warning on max doesn't matter
             avg.ice.6h = mean(ice_accretion_6hr, na.rm = TRUE),
             avg.feel = mean(feel, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(max.gust = ifelse(max.gust < 0,avg.wind, max.gust),
          avg.ice.6h = ifelse(is.na(avg.ice.6h), 0, avg.ice.6h))
 
-wthr %>%
-  mutate(avg.feel = ifelse(is.na(avg.feel), lag(avg.feel), avg.feel)) %>%
-  select(everything()) %>% 
-  summarise_all(funs(sum(is.na(.))))
 
 # I could try to do that just a few time. Or I observe that most NaNs are in from August up to end of year ... Or else I could just remove this column but I would feel it's pretty important 
 # I think it's worth looking at it with and without this variable. Way to impute this value could be to regress it based on actual temperature, wind and humidity. However it may also be redundant with other variables.
 ```
 
 This looks good!
+
+
+
 
 # Clasic datasets
 
@@ -142,6 +141,9 @@ colnames(stations) = stations[1,]
 stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total docks') %>% 
   mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
 glimpse(stations)
+
+
+
 df <- df %>%
     merge(stations %>% select(Name, docks),
         by.x = 'end.station.name',
@@ -430,11 +432,62 @@ network.flows <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
   group_by(start.station.name, start.time.interval) %>%                       # Now adding total_flows
   mutate(hourly.dep.flow.total = sum(hourly.dep.flow)) %>%
   ungroup() %>%
-  mutate(hourly.dep.flow.pct = hourly.dep.flow / hourly.dep.flow.total)
-  ## If needed, add missing time interval and stations and populate with 0 network flows.
+  mutate(hourly.dep.flow.pct = hourly.dep.flow / hourly.dep.flow.total) %>%
+  complete(start.time.interval = seq(as.POSIXct('2019-09-01 00:00:00:0000'), 
+                                     as.POSIXct('2019-10-01 00:00:00:0000'), by = time.int), 
+           start.station.name, end.station.name) ## Maybe better to complete after we aggregate the data!
 ```
 
-Next step: Visualization
+```{r}
+# Extract for Ani
+extc <- network.flows %>% filter(start.station.name %in% c("Kendall T", "MIT Pacific St at Purrington St", "Beacon St at Massachusetts Ave", "MIT Vassar St") & end.station.name %in% c("Kendall T", "MIT Pacific St at Purrington St", "Beacon St at Massachusetts Ave", "MIT Vassar St"))
+
+write.csv(extc,'Ani_extract.csv')
+```
+
+# Distance traveled by bikes
+
+```{r}
+library(geosphere)
+df <- df %>% rowwise() %>%
+  mutate(distance = distm(c(start.station.longitude, start.station.latitude), 
+                                c(end.station.longitude, end.station.latitude), fun = distHaversine)) %>%
+  ungroup() %>%
+  mutate(distance = distance / 1609)
+```
+
+```{r}
+bike_dist <- df %>%
+  group_by(bikeid, start.year, start.day.of.month) %>%
+  summarise(tot.dist.day =sum(distance)) %>%
+  ungroup()
+
+quantile(bike_dist$tot.dist.day, c(0.25,0.5,0.75, .95, .99))
+```
+
+# Clustering the stations
+
+```{r}
+stat.clusters = stations %>% filter(District %in% c("Cambridge", "Boston")) %>%
+  select(station.id, Latitude, Longitude)
+
+set.seed(147)
+km100 <- kmeans(stat.clusters %>% select(Longitude, Latitude), 
+             centers = 100, iter.max=1000) # centers randomly selected from rows of airline.scaled
+clusters100 <- km100$cluster
+table(clusters100)
+
+set.seed(147)
+km50 <- kmeans(stat.clusters %>% select(Longitude, Latitude), 
+             centers = 50, iter.max=1000) # centers randomly selected from rows of airline.scaled
+clusters50 <- km50$cluster
+table(clusters50)
+```
+
+
+
+
+
 
 
 
@@ -586,6 +639,17 @@ cum.bike.dep.arr %>% head(10)
 ```
 
 Next step is a visualization step: plot stations on the map as well as many different characteristics about this station.
+
+
+
+
+
+
+
+
+
+
+
 
 # Visualization
 
@@ -752,6 +816,30 @@ server <- function(input, output, session) {
 
 shinyApp(ui, server)
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
