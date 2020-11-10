@@ -252,7 +252,7 @@ ggplot(data=df.net.arrival %>% filter(station.name == '175 N Harvard St')) +
 
 
 
-# Heuristic on full/empty stations -- Not sure if this is useful anymore
+# Heuristic on full/empty stations -- Not useful anymore
 
 ```{r}
 ### Heuristic for empty/full stations
@@ -312,6 +312,7 @@ view(df.net.arrival %>% filter(station.name == 'Kendall T'))
 
 
 ## Computing the net evolution of number of bikes in a station during the day
+
 ```{r}
 # Approach: Build a database for each station, where events per this station are listed.
 
