@@ -24,6 +24,7 @@ library(leaftime)
 ## Caution change path
 path_to_directory_Victor <- "//Users/victorjouault/Desktop/MIT/Courses/15.072 - A. Edge/A. Edge Project/MIT-15.072-Bike-Rebalancing"
 setwd(path_to_directory_Victor)
+# setwd("/Users/David/Dropbox (MIT)/bluebikes/MIT-15.072-Bike-Rebalancing")
 rides_201909 = read.csv("201909-bluebikes-tripdata.csv")
 time.int = '1 hour' # Could be for example '15 min'
 
@@ -31,10 +32,15 @@ time.int = '1 hour' # Could be for example '15 min'
 
 # Loading station dataset
 
+## Victor Reading in
 stations = read.csv("current_bluebikes_stations.csv")
 colnames(stations) = stations[1,]
 stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total docks') %>% 
   mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
+
+## David Reading in
+stations = read.csv("current_bluebikes_stations.csv", skip = 1)
+stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks')
 
 # Loading raw dataset
 
@@ -366,6 +372,9 @@ net.flow <- function(df) {
   # Return df with network flows
   df
 }
+
+# Checking network flows of full dataset
+df.flows <- net.flow(df)
 
 # Network flows for each scenario
 df.scen.1.final <- net.flow(df.scen.1)
