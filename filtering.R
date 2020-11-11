@@ -32,19 +32,7 @@ time.int = '1 hour' # Could be for example '15 min'
 
 # Loading station dataset
 
-## Victor Reading in
-# stations = read.csv("current_bluebikes_stations.csv")
-# colnames(stations) = stations[1,]
-# stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total docks') %>% 
-#   mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
-
-## David Reading in
-stations = read.csv("current_bluebikes_stations.csv", skip = 1)
-stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks') %>% 
-  mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
-
-# Loading raw dataset
-
+## Reading in
 df <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
                               stoptime = as.POSIXct(stoptime),
                               gender = as.factor(gender),
@@ -60,7 +48,16 @@ df <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
                               start.station.latitude = as.numeric(start.station.latitude),
                               start.station.longitude = as.numeric(start.station.longitude),
                               end.station.latitude = as.numeric(end.station.latitude),
-                              end.station.longitude = as.numeric(end.station.longitude)) %>%
+                              end.station.longitude = as.numeric(end.station.longitude))
+
+stations = read.csv("current_bluebikes_stations.csv", skip = 1)
+stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks') %>% 
+  mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude)) %>%
+  filter(Name %in% df$start.station.name)             # Added filter to solve NaN problems
+
+# Loading raw dataset
+
+df <- df %>%
   mutate(
     start.time.interval = floor_date(starttime, time.int),
     .after = "starttime"
@@ -256,7 +253,7 @@ df.scen.2 <- full_join(df.scen.2, df.fil.2.5)
 df.scen.2 <- full_join(df.scen.2, df.fil.2.6)
 df.scen.2 <- full_join(df.scen.2, df.fil.2.7)
 
-##### Scenario 3: High - cannalize comutters, higher scale of optimistic best guess
+##### Scenario 3: High - cannibalize commuters, higher scale of optimistic best guess
 
 # All Weekend trips
 df.fil.3.1 <- trip.filtering(df,cust.per = 1, sub.per = 0.7, weekend.per = 1)
@@ -324,26 +321,14 @@ df.scen.4 <- full_join(df.scen.4, df.fil.4.6)
 
 ########################################################### Victor Update
 
-# Here: Aggregate stations by clusters
-stations = stations %>% filter(District %in% c("Cambridge", "Boston"))
-
-# We only keep 50 clusters for now -- should keep the model smooth
-set.seed(147)
-km50 <- kmeans(stations %>% select(Longitude, Latitude), 
-               centers = 50, iter.max=1000) 
-stations$area <- km50$cluster
-km50centroids <- km50$centers
-stations <- stations %>% merge(data.frame(km50centroids),
-                   by.x = 'area',
-                   by.y = 0,
-                   suffixes = c('','.area'), all.x = TRUE)
-# table(stations$area)
-
-
+### Run code at the end of the script to create the "preprocessed_stations.csv" if needed
+### Caution, this overwrite stations which might cause us to lose info -- may be worth checking what was before
+stations = read.csv('preprocessed_stations.csv')
 
 # df.scen.1.final <-df.scen.1  
 # Computing network flows from the above
 net.flow <- function(df) {
+  stations = read.csv('preprocessed_stations.csv')
   df <- df %>%
     merge(stations %>% select(Name, Latitude.area, Longitude.area, area),                # Adding number of docks per station and area
           by.x = 'start.station.name',
@@ -433,23 +418,80 @@ write.csv(wthr,'weather_cleaned.csv')
 
 
 
-### Exploration: Data vis of stations
+
+
+
+
+
+
+
+
+### Victor: Creating clusters and saving the station file with aggregated stations
+
 stations = read.csv("current_bluebikes_stations.csv", skip = 1)
-stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks') %>% 
-  mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
+stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks') %>%
+  mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude)) %>%
+  filter(Name %in% df$start.station.name)
 
-# Drawing a box of 
+# Drawing a box to filter stations
 
-lat_min = 42.331753
+lat_min = 42.33
 lat_max = 42.378412
 long_min = -71.126754
 long_max = -71.047058
 
-stations = stations %>% filter(Latitude > lat_min )
+stations = stations %>% filter((Latitude > lat_min) & (Latitude < lat_max) &
+                                 (Longitude > long_min) & (Longitude<long_max))
 
-agg_stations = data.frame(km50centroids)
-
-leaflet(agg_stations) %>%
+# Visualization of stations before clustering
+leaflet(stations) %>%
   setView(lng = -71.0589, lat = 42.3601, zoom = 12) %>%
   addProviderTiles(providers$CartoDB.Positron) %>%
-  addCircleMarkers()
+  addCircleMarkers(
+    popup = ~Name
+  )
+
+# Clustering phase
+set.seed(147)
+km50 <- kmeans(stations %>% select(Longitude, Latitude),
+               centers = 50, iter.max=1000)
+stations$area <- km50$cluster
+km50centroids <- km50$centers
+stations <- stations %>% merge(data.frame(km50centroids),
+                               by.x = 'area',
+                               by.y = 0,
+                               suffixes = c('','.area'), all.x = TRUE)
+
+leaflet(stations %>% group_by(area) %>%
+          summarize(Longitude.area = mean(Longitude.area), Latitude.area = mean(Latitude.area))) %>%
+  setView(lng = -71.0589, lat = 42.3601, zoom = 12) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers(
+    lat = ~Latitude.area,
+    lng = ~Longitude.area,
+    popup = ~as.character(area),
+  )
+
+# write.csv(stations,'preprocessed_stations.csv')
+# stations = read.csv('preprocessed_stations.csv')
+
+
+
+# Exploration
+pure_stat = stations %>% group_by(area) %>%
+  summarize(Longitude.area = mean(Longitude.area), Latitude.area = mean(Latitude.area))
+
+leaflet(df.flows %>% merge(pure_stat, by.x = 'start.area', by.y = 'area') %>%
+          group_by(start.area) %>%
+          summarize(Longitude.area = mean(Longitude.area), Latitude.area = mean(Latitude.area))) %>%
+  setView(lng = -71.0589, lat = 42.3601, zoom = 12) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers(
+    lat = ~Latitude.area,
+    lng = ~Longitude.area
+  )
+
+
+
+
+
