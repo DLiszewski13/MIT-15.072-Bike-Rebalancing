@@ -435,7 +435,7 @@ network.flows <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
   ungroup() %>%
   mutate(hourly.dep.flow.pct = hourly.dep.flow / hourly.dep.flow.total) %>%
   complete(start.time.interval = seq(as.POSIXct('2019-09-01 00:00:00:0000'), 
-                                     as.POSIXct('2019-10-01 00:00:00:0000'), by = time.int), 
+                                     as.POSIXct('2019-10-01 00:00:00:0000'), by = "1 hour"), 
            start.station.name, end.station.name) ## Maybe better to complete after we aggregate the data!
 ```
 
@@ -466,24 +466,80 @@ bike_dist <- df %>%
 quantile(bike_dist$tot.dist.day, c(0.25,0.5,0.75, .95, .99))
 ```
 
-# Clustering the stations
+
+
+
+
+
+
+# Aggregating the stations and visualizing network flows
 
 ```{r}
-stat.clusters = stations %>% filter(District %in% c("Cambridge", "Boston")) %>%
-  select(station.id, Latitude, Longitude)
-
+stations = stations %>% filter(District %in% c("Cambridge", "Boston"))
 set.seed(147)
-km100 <- kmeans(stat.clusters %>% select(Longitude, Latitude), 
-             centers = 100, iter.max=1000) # centers randomly selected from rows of airline.scaled
-clusters100 <- km100$cluster
-table(clusters100)
-
-set.seed(147)
-km50 <- kmeans(stat.clusters %>% select(Longitude, Latitude), 
-             centers = 50, iter.max=1000) # centers randomly selected from rows of airline.scaled
-clusters50 <- km50$cluster
+km50 <- kmeans(stations %>% select(Longitude, Latitude), 
+               centers = 50, iter.max=1000) 
+stations$area <- km50$cluster
+km50centroids <- km50$centers
 table(clusters50)
 ```
+
+```{r}
+stations <- stations %>% merge(data.frame(km50centroids),
+                   by.x = 'area',
+                   by.y = 0,
+                   suffixes = c('','.area'), all.x = TRUE)
+
+flows_final <- df %>%
+  merge(stations %>% select(Name, Latitude.area, Longitude.area, area),                # Adding number of docks per station and area
+        by.x = 'start.station.name',
+        by.y = 'Name',
+        suffixes = c('','.start'), all.x = TRUE) %>%
+  merge(stations %>% select(Name, Latitude.area, Longitude.area, area),
+        by.x = 'end.station.name',
+        by.y = 'Name',
+        suffixes = c('','.end'), all.x = TRUE) %>%
+  rename(start.latitude = Latitude.area, start.longitude = Longitude.area,
+         end.latitude = Latitude.area.end, end.longitude = Longitude.area.end, start.area = area, end.area = area.end) %>%
+  group_by(start.area, end.area, start.time.interval) %>%
+  summarise(hourly.dep.flow = n()) %>%                                # Now adding departure_flow
+  ungroup() %>%                                                      
+  arrange(start.area, start.time.interval, end.area) %>%
+  group_by(start.area, start.time.interval) %>%                       # Now adding total_flows
+  mutate(hourly.dep.flow.total = sum(hourly.dep.flow)) %>%
+  ungroup() %>%
+  mutate(hourly.dep.flow.pct = hourly.dep.flow / hourly.dep.flow.total) %>% # Here is where we group flows per area
+  complete(start.time.interval = seq(as.POSIXct('2019-09-01 00:00:00:0000'), 
+                                     as.POSIXct('2019-09-30 23:00:00:0000'), by = '1 hour'), 
+           start.area, end.area) %>%
+  drop_na(start.area, end.area) %>%
+  mutate(hourly.dep.flow = ifelse(is.na(hourly.dep.flow), 0, hourly.dep.flow),
+         hourly.dep.flow.total = ifelse(is.na(hourly.dep.flow.total), 0, hourly.dep.flow.total),
+         hourly.dep.flow.pct = ifelse(is.na(hourly.dep.flow.pct), 0, hourly.dep.flow.pct))
+```
+
+```{r}
+
+agg_stations = data.frame(km50centroids)
+
+m <- leaflet(agg_stations) %>%
+  setView(lng = -71.0589, lat = 42.3601, zoom = 12) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers()
+    # radius = ~value/60,
+    # color = ~pal(key),
+    # opacity = ~.5,
+    # popup = ~station
+#  ) %>%
+  # addLegend("bottomright", pal = pal, values = ~key,
+  #   title = "Morning departure/Evening arrival",
+  #   labels = c('Total number of bikes that started one day in station', 'Total number of bikes that finished one day in station'),
+  #   opacity = 1
+  # )
+m
+```
+
+
 
 
 

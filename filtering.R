@@ -33,14 +33,15 @@ time.int = '1 hour' # Could be for example '15 min'
 # Loading station dataset
 
 ## Victor Reading in
-stations = read.csv("current_bluebikes_stations.csv")
-colnames(stations) = stations[1,]
-stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total docks') %>% 
-  mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
+# stations = read.csv("current_bluebikes_stations.csv")
+# colnames(stations) = stations[1,]
+# stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total docks') %>% 
+#   mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
 
 ## David Reading in
 stations = read.csv("current_bluebikes_stations.csv", skip = 1)
-stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks')
+stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks') %>% 
+  mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
 
 # Loading raw dataset
 
@@ -414,3 +415,41 @@ write.csv(df.scen.2.final,'sept19_filter_agg_scen2.csv')
 write.csv(df.scen.3.final,'sept19_filter_agg_scen3.csv')
 write.csv(df.scen.4.final,'sept19_filter_agg_scen4.csv')
 write.csv(wthr,'weather_cleaned.csv')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Exploration: Data vis of stations
+stations = read.csv("current_bluebikes_stations.csv", skip = 1)
+stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks') %>% 
+  mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
+
+# Drawing a box of 
+
+lat_min = 42.331753
+lat_max = 42.378412
+long_min = -71.126754
+long_max = -71.047058
+
+stations = stations %>% filter(Latitude > lat_min )
+
+agg_stations = data.frame(km50centroids)
+
+leaflet(agg_stations) %>%
+  setView(lng = -71.0589, lat = 42.3601, zoom = 12) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers()
