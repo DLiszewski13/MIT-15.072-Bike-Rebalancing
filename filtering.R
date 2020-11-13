@@ -51,7 +51,7 @@ df <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
                               end.station.longitude = as.numeric(end.station.longitude))
 
 stations = read.csv("current_bluebikes_stations.csv", skip = 1)
-stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks') %>% 
+stations = stations %>% dplyr::rename(docks = Total.docks) %>% 
   mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude)) %>%
   filter(Name %in% df$start.station.name)             # Added filter to solve NaN problems
 
@@ -338,10 +338,12 @@ net.flow <- function(df) {
           by.x = 'end.station.name',
           by.y = 'Name',
           suffixes = c('','.end'), all.x = TRUE) %>%
-    rename(start.latitude = Latitude.area, start.longitude = Longitude.area,
+    mutate(start.latitude = Latitude.area, start.longitude = Longitude.area,
            end.latitude = Latitude.area.end, end.longitude = Longitude.area.end, start.area = area, end.area = area.end) %>%
+    select(-Latitude.area, -Longitude.area,
+           -Latitude.area.end, -Longitude.area.end, -area, -area.end) %>%
     group_by(start.area, end.area, start.time.interval) %>%
-    summarise(hourly.dep.flow = n()) %>%                                # Now adding departure_flow
+    dplyr::summarise(hourly.dep.flow = n()) %>%                                # Now adding departure_flow
     ungroup() %>%                                                      
     arrange(start.area, start.time.interval, end.area) %>%
     group_by(start.area, start.time.interval) %>%                       # Now adding total_flows
@@ -428,6 +430,284 @@ write.csv(wthr,'weather_cleaned.csv')
 
 
 
+
+
+
+## Writing a function that takes a raw dataset as input (string with filename) and outputs a file with
+# the right name
+
+# We have to run the other functions to define them before! #
+
+raw_to_flows <- function(input_csv, output_name){
+  
+  rides = read.csv(input_csv)
+  time.int = '1 hour' # Could be for example '15 min'
+  
+  #### Filtering Datset Work ####
+  
+  # Loading station dataset
+  
+  ## Reading in
+  df <- rides %>% mutate(starttime = as.POSIXct(starttime),
+                                stoptime = as.POSIXct(stoptime),
+                                gender = as.factor(gender),
+                                start.year = as.integer(format(starttime, "%Y")),
+                                start.month = as.integer(format(starttime, "%m")),
+                                start.day.of.month = as.integer(format(starttime, "%d")),
+                                start.day.of.week = as.integer(format(starttime, "%w")),
+                                start.hour = as.integer(format(starttime, "%H")),
+                                start.min = as.integer(format(starttime, "%M")),
+                                start.time.of.day = start.hour + (start.min/60), 
+                                start.quarter = as.integer(start.time.of.day*4)/4,
+                                .keep = "unused",
+                                start.station.latitude = as.numeric(start.station.latitude),
+                                start.station.longitude = as.numeric(start.station.longitude),
+                                end.station.latitude = as.numeric(end.station.latitude),
+                                end.station.longitude = as.numeric(end.station.longitude))
+  
+  stations = read.csv("current_bluebikes_stations.csv", skip = 1)
+  stations = stations[2:dim(stations)[1],] %>% mutate(docks = Total.docks) %>% select(-Total.docks) %>%
+    mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude)) %>%
+    filter(Name %in% df$start.station.name)             # Added filter to solve NaN problems
+  
+  # Loading raw dataset
+  
+  df <- df %>%
+    mutate(
+      start.time.interval = floor_date(starttime, time.int),
+      .after = "starttime"
+    ) %>%
+    mutate(
+      stop.time.interval = floor_date(stoptime, time.int),
+      .after= 'stoptime'
+    ) %>% 
+    mutate(tripduration.mins = tripduration/60) %>%     # David: needed for the algo
+    # Takes the ceiling of trip duration to get integer values
+    mutate(tripduration.mins.int = ceiling(tripduration.mins)) %>%
+    merge(stations %>% select(Name, docks),                        # To get number of docks if necessary
+          by.x = 'end.station.name',
+          by.y = 'Name',
+          suffixes = c('','.end'), all.x = TRUE) %>%
+    merge(stations %>% select(Name, docks),
+          by.x = 'start.station.name',
+          by.y = 'Name',
+          suffixes = c('','.start'), all.x = TRUE) %>%
+    mutate(docks.start= as.numeric(docks.start),
+           docks.end = as.numeric(docks),
+           .keep = 'unused'
+    )
+  
+  ###################################################################### Scenarios
+  
+  ##### Scenario 1: Med - optimistic best guess
+  
+  # All Weekend trips
+  df.fil1 <- trip.filtering(df,cust.per = 1, sub.per = 0.5, weekend.per = 1)
+  # Weekday, 7-8 start, 20%
+  df.fil2 <- trip.filtering(df,cust.per = 1, sub.per = 0.5, start.time.low = 7, 
+                            start.time.high = 8, start.time.per = 0.2,
+                            weekday.per = 1)
+  # Weekday, 9-4 start, 100%
+  df.fil3 <- trip.filtering(df,cust.per = 1, sub.per = 0.5, start.time.low = 9, 
+                            start.time.high = 16, start.time.per = 1,
+                            weekday.per = 1)
+  # Weekday, 5-6PM start, 40%
+  df.fil4 <- trip.filtering(df,cust.per = 1, sub.per = 0.5, start.time.low = 17,
+                            start.time.high = 18, start.time.per = 0.4,
+                            weekday.per = 1)
+  # Weekday, 7-11PM start, 80%
+  df.fil5 <- trip.filtering(df,cust.per = 1, sub.per = 0.5, start.time.low = 19,
+                            start.time.high = 23, start.time.per = 0.8,
+                            weekday.per = 1)
+  # Weekday, 12AM-6AM start, 80%
+  df.fil6 <- trip.filtering(df,cust.per = 1, sub.per = 0.5, start.time.low = 0,
+                            start.time.high = 6, start.time.per = 0.8, 
+                            weekday.per = 1)
+  
+  # Joining Filtrations done above
+  df.scen.1 <- full_join(df.fil1,df.fil2)
+  df.scen.1 <- full_join(df.scen.1, df.fil3)
+  df.scen.1 <- full_join(df.scen.1, df.fil4)
+  df.scen.1 <- full_join(df.scen.1, df.fil5)
+  df.scen.1 <- full_join(df.scen.1, df.fil6)
+  
+  # Percentage of data filtered out
+  # nrow(df.scen.1) / nrow(df)
+  
+  ##### Scenario 2: Low - most of customer, rarely any subscribers (esp during rush hour), good w weekend subcribers (fun trips)
+  
+  # 80% customer trips
+  df.fil.2.1 <- trip.filtering(df,cust.per = 0.8)
+  # 40% weekend subscribers
+  df.fil.2.2 <- trip.filtering(df,sub.per = 0.4, weekend.per = 1)
+  # 5% rush hour subscribers, 10% otherwise
+  # Weekday, 7-8 start
+  df.fil.2.3 <- trip.filtering(df, sub.per = 1, start.time.low = 7, 
+                               start.time.high = 8, start.time.per = 0.05,
+                               weekday.per = 1)
+  # Weekday, 9-4 start
+  df.fil.2.4 <- trip.filtering(df, sub.per = 1, start.time.low = 9, 
+                               start.time.high = 16, start.time.per = 0.1,
+                               weekday.per = 1)
+  # Weekday, 5-6PM start
+  df.fil.2.5 <- trip.filtering(df, sub.per = 1, start.time.low = 17,
+                               start.time.high = 18, start.time.per = 0.05,
+                               weekday.per = 1)
+  # Weekday, 7-11PM start
+  df.fil.2.6 <- trip.filtering(df, sub.per = 1, start.time.low = 19,
+                               start.time.high = 23, start.time.per = 0.1,
+                               weekday.per = 1)
+  # Weekday, 12AM-6AM start
+  df.fil.2.7 <- trip.filtering(df, sub.per = 1, start.time.low = 0,
+                               start.time.high = 6, start.time.per = 0.1, 
+                               weekday.per = 1)
+  
+  # Joining Filtrations done above
+  df.scen.2 <- full_join(df.fil.2.1,df.fil.2.2)
+  df.scen.2 <- full_join(df.scen.2, df.fil.2.3)
+  df.scen.2 <- full_join(df.scen.2, df.fil.2.4)
+  df.scen.2 <- full_join(df.scen.2, df.fil.2.5)
+  df.scen.2 <- full_join(df.scen.2, df.fil.2.6)
+  df.scen.2 <- full_join(df.scen.2, df.fil.2.7)
+  
+  ##### Scenario 3: High - cannibalize commuters, higher scale of optimistic best guess
+  
+  # All Weekend trips
+  df.fil.3.1 <- trip.filtering(df,cust.per = 1, sub.per = 0.7, weekend.per = 1)
+  # Weekday, 7-8 start, 20%
+  df.fil.3.2 <- trip.filtering(df,cust.per = 1, sub.per = 0.7, start.time.low = 7, 
+                               start.time.high = 8, start.time.per = 0.2,
+                               weekday.per = 1)
+  # Weekday, 9-4 start, 100%
+  df.fil.3.3 <- trip.filtering(df,cust.per = 1, sub.per = 0.7, start.time.low = 9, 
+                               start.time.high = 16, start.time.per = 1,
+                               weekday.per = 1)
+  # Weekday, 5-6PM start, 40%
+  df.fil.3.4 <- trip.filtering(df,cust.per = 1, sub.per = 0.7, start.time.low = 17,
+                               start.time.high = 18, start.time.per = 0.4,
+                               weekday.per = 1)
+  # Weekday, 7-11PM start, 80%
+  df.fil.3.5 <- trip.filtering(df,cust.per = 1, sub.per = 0.7, start.time.low = 19,
+                               start.time.high = 23, start.time.per = 0.8,
+                               weekday.per = 1)
+  # Weekday, 12AM-6AM start, 80%
+  df.fil.3.6 <- trip.filtering(df,cust.per = 1, sub.per = 0.7, start.time.low = 0,
+                               start.time.high = 6, start.time.per = 0.8, 
+                               weekday.per = 1)
+  
+  # Joining Filtrations done above
+  df.scen.3 <- full_join(df.fil.3.1,df.fil.3.2)
+  df.scen.3 <- full_join(df.scen.3, df.fil.3.3)
+  df.scen.3 <- full_join(df.scen.3, df.fil.3.4)
+  df.scen.3 <- full_join(df.scen.3, df.fil.3.5)
+  df.scen.3 <- full_join(df.scen.3, df.fil.3.6)
+  
+  
+  ##### Scenario 4: Low - lower scale of optimistic best guess
+  
+  # All Weekend trips
+  df.fil.4.1 <- trip.filtering(df,cust.per = 0.8, sub.per = 0.25, weekend.per = 1)
+  # Weekday, 7-8 start, 20%
+  df.fil.4.2 <- trip.filtering(df,cust.per = 0.8, sub.per = 0.25, start.time.low = 7, 
+                               start.time.high = 8, start.time.per = 0.2,
+                               weekday.per = 1)
+  # Weekday, 9-4 start, 100%
+  df.fil.4.3 <- trip.filtering(df,cust.per = 0.8, sub.per = 0.25, start.time.low = 9, 
+                               start.time.high = 16, start.time.per = 1,
+                               weekday.per = 1)
+  # Weekday, 5-6PM start, 40%
+  df.fil.4.4 <- trip.filtering(df,cust.per = 0.8, sub.per = 0.25, start.time.low = 17,
+                               start.time.high = 18, start.time.per = 0.4,
+                               weekday.per = 1)
+  # Weekday, 7-11PM start, 80%
+  df.fil.4.5 <- trip.filtering(df,cust.per = 0.8, sub.per = 0.25, start.time.low = 19,
+                               start.time.high = 23, start.time.per = 0.8,
+                               weekday.per = 1)
+  # Weekday, 12AM-6AM start, 80%
+  df.fil.4.6 <- trip.filtering(df,cust.per = 0.8, sub.per = 0.25, start.time.low = 0,
+                               start.time.high = 6, start.time.per = 0.8, 
+                               weekday.per = 1)
+  
+  # Joining Filtrations done above
+  df.scen.4 <- full_join(df.fil.4.1,df.fil.4.2)
+  df.scen.4 <- full_join(df.scen.4, df.fil.4.3)
+  df.scen.4 <- full_join(df.scen.4, df.fil.4.4)
+  df.scen.4 <- full_join(df.scen.4, df.fil.4.5)
+  df.scen.4 <- full_join(df.scen.4, df.fil.4.6)
+  
+  
+  ########################################################### Victor Update
+  
+  ### Run code at the end of the script to create the "preprocessed_stations.csv" if needed
+  ### Caution, this overwrite stations which might cause us to lose info -- 
+  ### may be worth checking what was before
+  stations = read.csv('preprocessed_stations.csv')
+  
+  # df.scen.1.final <-df.scen.1  
+  # Computing network flows from the above
+  
+  # Checking network flows of full dataset
+  df.flows <- net.flow(df)
+  
+  # Network flows for each scenario
+  df.scen.1.final <- net.flow(df.scen.1)
+  df.scen.2.final <- net.flow(df.scen.2)
+  df.scen.3.final <- net.flow(df.scen.3)
+  df.scen.4.final <- net.flow(df.scen.4)
+  
+  ## Writing files to csv for Julia use
+  write.csv(df.scen.1.final,paste(output_name, "_filter_agg_scen1.csv", sep=""))
+  write.csv(df.scen.2.final,paste(output_name, "_filter_agg_scen2.csv", sep=""))
+  write.csv(df.scen.3.final,paste(output_name, "_filter_agg_scen3.csv", sep=""))
+  write.csv(df.scen.4.final,paste(output_name, "_filter_agg_scen4.csv", sep=""))
+}
+  
+raw_to_flows("201509-hubway-tripdata.csv", "sept15")
+
+raw_to_flows("201609-hubway-tripdata.csv", "sept16")
+
+raw_to_flows("201709-hubway-tripdata.csv", "sept17")
+
+raw_to_flows("201809-bluebikes-tripdata.csv", "sept18")
+
+
+## For the scenarios
+
+sept2015 = read.csv("sept15_filter_agg_scen1.csv")
+sept2016 = read.csv("sept16_filter_agg_scen1.csv")
+sept2017 = read.csv("sept17_filter_agg_scen1.csv")
+sept2018 = read.csv("sept18_filter_agg_scen1.csv")
+sept2019 = read.csv("sept19_filter_agg_scen1.csv")
+
+tot2015 = sum(sept2015$hourly.dep.flow)
+tot2016 = sum(sept2016$hourly.dep.flow)
+tot2017 = sum(sept2017$hourly.dep.flow)
+tot2018 = sum(sept2018$hourly.dep.flow)
+tot2019 = sum(sept2019$hourly.dep.flow)
+
+tot = data.frame(year = c(2015, 2016, 2017, 2018, 2019),
+           tot.ride = c(tot2015, tot2016, tot2017, tot2018, tot2019))
+
+tot$logtot = log(tot$tot.ride)
+
+ggplot(data=tot) + 
+  geom_line(aes(x=year, y=tot.ride), color = "red") +
+  theme_bw() +
+  xlab('Year') +
+  ylab('Total number of rides')
+
+lm_lin <- lm(tot.ride ~ year,data = tot)
+summary(lm_lin)
+lm_log <- lm(logtot ~ year,data = tot)
+summary(lm_log) # Improves in-sample R2 - no test here
+
+# Predicted value for 2021
+
+res21lin <- predict(lm_lin, newdata=data.frame(year = 2021))
+res21log <- exp(predict(lm_log, newdata=data.frame(year = 2021)))
+
+print(res21lin)
+print(res21log)
 
 
 
