@@ -428,6 +428,9 @@ write.csv(wthr,'weather_cleaned.csv')
 
 raw_to_flows <- function(input_csv, output_name){
   
+  path_to_directory_data <- "/Users/victorjouault/Desktop/MIT/Courses/15.072 - A. Edge/A. Edge Project/MIT-15.072-Bike-Rebalancing/Data_Scenarios"
+  setwd(path_to_directory_data)
+  
   rides = read.csv(input_csv)
   time.int = '1 hour' # Could be for example '15 min'
   
@@ -643,6 +646,9 @@ raw_to_flows <- function(input_csv, output_name){
   df.scen.3.final <- net.flow(df.scen.3)
   df.scen.4.final <- net.flow(df.scen.4)
   
+  path_to_directory_output <- "/Users/victorjouault/Desktop/MIT/Courses/15.072 - A. Edge/A. Edge Project/MIT-15.072-Bike-Rebalancing/Ani_Output"
+  setwd(path_to_directory_output)
+  
   ## Writing files to csv for Julia use
   write.csv(df.scen.1.final,paste(output_name, "_filter_agg_scen1.csv", sep=""))
   write.csv(df.scen.2.final,paste(output_name, "_filter_agg_scen2.csv", sep=""))
@@ -650,14 +656,38 @@ raw_to_flows <- function(input_csv, output_name){
   write.csv(df.scen.4.final,paste(output_name, "_filter_agg_scen4.csv", sep=""))
 }
   
-raw_to_flows("201509-hubway-tripdata.csv", "sept15")
+# raw_to_flows("201509-hubway-tripdata.csv", "sept15")
+# 
+# raw_to_flows("201609-hubway-tripdata.csv", "sept16")
+# 
+# raw_to_flows("201709-hubway-tripdata.csv", "sept17")
 
-raw_to_flows("201609-hubway-tripdata.csv", "sept16")
+# raw_to_flows("201809-bluebikes-tripdata.csv", "sept18")
 
-raw_to_flows("201709-hubway-tripdata.csv", "sept17")
+raw_to_flows("201501-hubway-tripdata.csv", "jan15")
+raw_to_flows("201502-hubway-tripdata.csv", "feb15")
+raw_to_flows("201503-hubway-tripdata.csv", "mar15")
+raw_to_flows("201505-hubway-tripdata.csv", "may15")
 
-raw_to_flows("201809-bluebikes-tripdata.csv", "sept18")
+raw_to_flows("201601-hubway-tripdata.csv", "jan16")
+raw_to_flows("201602-hubway-tripdata.csv", "feb16")
+raw_to_flows("201603-hubway-tripdata.csv", "mar16")
+raw_to_flows("201605-hubway-tripdata.csv", "may16")
 
+raw_to_flows("201701-hubway-tripdata.csv", "jan17")
+raw_to_flows("201702-hubway-tripdata.csv", "feb17")
+raw_to_flows("201703-hubway-tripdata.csv", "mar17")
+raw_to_flows("201705-hubway-tripdata.csv", "may17")
+
+raw_to_flows("201801-hubway-tripdata.csv", "jan18")
+raw_to_flows("201802-hubway-tripdata.csv", "feb18")
+raw_to_flows("201803-hubway-tripdata.csv", "mar18")
+raw_to_flows("201805-bluebikes-tripdata.csv", "may18")
+
+raw_to_flows("201901-bluebikes-tripdata.csv", "jan19")
+raw_to_flows("201902-bluebikes-tripdata.csv", "feb19")
+raw_to_flows("201903-bluebikes-tripdata.csv", "mar19")
+raw_to_flows("201905-bluebikes-tripdata.csv", "may19")
 
 ## For the scenarios
 
