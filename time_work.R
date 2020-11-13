@@ -1,11 +1,22 @@
 ## Time work
 
+# Set wd
+setwd("/Users/David/Dropbox (MIT)/bluebikes/MIT-15.072-Bike-Rebalancing")
+
 # Filtering longest trips (outliers)
 # Creating columns if neccesary
 df_time <- df %>% 
-  filter(tripduration < quantile(df$tripduration, probs = .98)) %>%
-  mutate(tripduration.mins = tripduration/60) %>%
-  mutate(tripduration.mins.int = ceiling(tripduration.mins))
+  filter(tripduration < quantile(df$tripduration, probs = .98)) 
+# %>%
+#   mutate(tripduration.mins = tripduration/60) %>%
+#   mutate(tripduration.mins.int = ceiling(tripduration.mins))
+
+# Plotting days of week and start hour travel times
+df %>%
+  group_by(start.hour,start.day.of.week) %>%
+  summarise(n = n()) %>%
+  ggplot() +
+  geom_point(aes(x=start.hour,y=n,color = as.factor(start.day.of.week)))
 
 
 df_time %>%

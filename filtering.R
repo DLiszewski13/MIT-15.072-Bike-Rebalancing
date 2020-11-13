@@ -72,11 +72,11 @@ df <- df %>%
   merge(stations %>% select(Name, docks),                        # To get number of docks if necessary
         by.x = 'end.station.name',
         by.y = 'Name',
-        suffixes = c('','.end'), all.x = TRUE) %>%
-  merge(stations %>% select(Name, docks),
+        suffixes = c('','.end')) %>% # , all.x = TRUE
+  merge(stations %>% select(Name, docks, Median.Household.Income),
         by.x = 'start.station.name',
         by.y = 'Name',
-        suffixes = c('','.start'), all.x = TRUE) %>%
+        suffixes = c('','.start')) %>% # , all.x = TRUE
   mutate(docks.start= as.numeric(docks.start),
          docks.end = as.numeric(docks),
          .keep = 'unused'
@@ -357,9 +357,23 @@ net.flow <- function(df) {
     mutate(hourly.dep.flow = ifelse(is.na(hourly.dep.flow), 0, hourly.dep.flow),
            hourly.dep.flow.total = ifelse(is.na(hourly.dep.flow.total), 0, hourly.dep.flow.total),
            hourly.dep.flow.pct = ifelse(is.na(hourly.dep.flow.pct), 0, hourly.dep.flow.pct))
+  # Renaming columns for Julia use, getting hour, day, weekday
+  df <- df %>%
+    mutate(Day = as.integer(format(start.time.interval, "%d")),
+           # start_day_of_week = as.integer(format(start.time.interval, "%w")),
+           Hour = as.integer(format(start.time.interval, "%H")))  %>%
+    mutate(start_time_interval = start.time.interval) %>%
+    mutate(start_area = start.area) %>%
+    mutate(end_area = end.area) %>%
+    mutate(dep_flow = hourly.dep.flow) %>%
+    mutate(hourly_dep_flow_total = hourly.dep.flow.total) %>%
+    mutate(hourly_dep_flow_pct = hourly.dep.flow.pct) %>%
+    select(-c(start.area,end.area,start.time.interval,hourly.dep.flow,
+              hourly.dep.flow.total,hourly.dep.flow.pct))
   # Return df with network flows
   df
 }
+
 
 # Checking network flows of full dataset
 df.flows <- net.flow(df)
