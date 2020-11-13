@@ -33,14 +33,24 @@ time.int = '1 hour' # Could be for example '15 min'
 # Loading station dataset
 
 ## Victor Reading in
-stations = read.csv("current_bluebikes_stations.csv")
-colnames(stations) = stations[1,]
-stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total docks') %>% 
-  mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
+# stations = read.csv("current_bluebikes_stations.csv")
+# colnames(stations) = stations[1,]
+# stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total docks') %>%
+#   mutate(Latitude = as.numeric(Latitude), Longitude = as.numeric(Longitude))
 
 ## David Reading in
-stations = read.csv("current_bluebikes_stations.csv", skip = 1)
-stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks')
+# stations = read.csv("current_bluebikes_stations.csv", skip = 1)
+# stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks')
+
+## Reading in updated demogrpahics stations file
+stations <- read.csv("station_demographics.csv")
+stations <- stations %>%
+  rename(docks = 'Total.docks')
+# Removing newest stations (outside 100 memorial lol)
+stations <- stations %>%
+  filter(!is.na(Median.Household.Income))#  %>%
+# Might be filtering a different way
+#  filter(District %in% c("Cambridge", "Boston"))
 
 # Loading raw dataset
 
@@ -74,11 +84,11 @@ df <- rides_201909 %>% mutate(starttime = as.POSIXct(starttime),
   merge(stations %>% select(Name, docks),                        # To get number of docks if necessary
         by.x = 'end.station.name',
         by.y = 'Name',
-        suffixes = c('','.end'), all.x = TRUE) %>%
-  merge(stations %>% select(Name, docks),
+        suffixes = c('','.end')) %>% # , all.x = TRUE
+  merge(stations %>% select(Name, docks, Median.Household.Income),
         by.x = 'start.station.name',
         by.y = 'Name',
-        suffixes = c('','.start'), all.x = TRUE) %>%
+        suffixes = c('','.start')) %>% # , all.x = TRUE
   mutate(docks.start= as.numeric(docks.start),
          docks.end = as.numeric(docks),
          .keep = 'unused'
@@ -324,7 +334,7 @@ df.scen.4 <- full_join(df.scen.4, df.fil.4.6)
 ########################################################### Victor Update
 
 # Here: Aggregate stations by clusters
-stations = stations %>% filter(District %in% c("Cambridge", "Boston"))
+# stations = stations %>% filter(District %in% c("Cambridge", "Boston"))
 
 # We only keep 50 clusters for now -- should keep the model smooth
 set.seed(147)
@@ -369,9 +379,21 @@ net.flow <- function(df) {
     mutate(hourly.dep.flow = ifelse(is.na(hourly.dep.flow), 0, hourly.dep.flow),
            hourly.dep.flow.total = ifelse(is.na(hourly.dep.flow.total), 0, hourly.dep.flow.total),
            hourly.dep.flow.pct = ifelse(is.na(hourly.dep.flow.pct), 0, hourly.dep.flow.pct))
+  # Renaming columns for Julia use, getting hour, day, weekday
+  df <- df %>%
+    mutate(start_day_of_month = as.integer(format(start.time.interval, "%d")),
+           start_day_of_week = as.integer(format(start.time.interval, "%w")),
+           start_hour = as.integer(format(start.time.interval, "%H")))  %>%
+    rename(start_time_interval = "start.time.interval") %>%
+    rename(start_area = "start.area") %>%
+    rename(end_area = "end.area") %>%
+    rename(hourly_dep_flow = "hourly.dep.flow") %>%
+    rename(hourly_dep_flow_total = "hourly.dep.flow.total") %>%
+    rename(hourly_dep_flow_pct = "hourly.dep.flow.pct") 
   # Return df with network flows
   df
 }
+
 
 # Checking network flows of full dataset
 df.flows <- net.flow(df)
