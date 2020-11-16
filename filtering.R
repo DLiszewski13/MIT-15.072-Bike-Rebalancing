@@ -693,9 +693,9 @@ raw_to_flows("201702-hubway-tripdata.csv", "feb17")
 raw_to_flows("201703-hubway-tripdata.csv", "mar17")
 raw_to_flows("201705-hubway-tripdata.csv", "may17")
 
-raw_to_flows("201801-hubway-tripdata.csv", "jan18")
-raw_to_flows("201802-hubway-tripdata.csv", "feb18")
-raw_to_flows("201803-hubway-tripdata.csv", "mar18")
+raw_to_flows("201801_hubway_tripdata.csv", "jan18")
+raw_to_flows("201802_hubway_tripdata.csv", "feb18")
+raw_to_flows("201803_hubway_tripdata.csv", "mar18")
 raw_to_flows("201805-bluebikes-tripdata.csv", "may18")
 
 raw_to_flows("201901-bluebikes-tripdata.csv", "jan19")
