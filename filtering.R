@@ -328,6 +328,12 @@ stations = read.csv('preprocessed_stations.csv')
 # df.scen.1.final <-df.scen.1  
 # Computing network flows from the above
 net.flow <- function(df) {
+  
+  month = df$start.month[1]
+  year = df$start.year[1]
+  start.of.month = as.POSIXct(paste(year,'-',month,'-01 00:00:00:0000', sep = ''))
+  end.of.month = as.POSIXct(paste(year,'-',month + 1,'-01 00:00:00:0000', sep = '')) - 3600
+  
   stations = read.csv('preprocessed_stations.csv')
   df <- df %>%
     merge(stations %>% select(Name, Latitude.area, Longitude.area, area),                # Adding number of docks per station and area
@@ -350,9 +356,9 @@ net.flow <- function(df) {
     mutate(hourly.dep.flow.total = sum(hourly.dep.flow)) %>%
     ungroup() %>%
     mutate(hourly.dep.flow.pct = hourly.dep.flow / hourly.dep.flow.total) %>% # Here is where we group flows per area
-    complete(start.time.interval = seq(as.POSIXct('2019-09-01 00:00:00:0000'), 
-                                       as.POSIXct('2019-09-30 23:00:00:0000'), by = '1 hour'), 
-             start.area, end.area) %>%
+    complete(start.time.interval = seq(start.of.month, 
+                                       end.of.month, by = '1 hour'), 
+             start.area = 1:50, end.area = 1:50, fill = list(dep_flow = 0)) %>%                                                 ### This is where I changed everything
     drop_na(start.area, end.area) %>%
     mutate(hourly.dep.flow = ifelse(is.na(hourly.dep.flow), 0, hourly.dep.flow),
            hourly.dep.flow.total = ifelse(is.na(hourly.dep.flow.total), 0, hourly.dep.flow.total),
@@ -383,6 +389,10 @@ df.scen.1.final <- net.flow(df.scen.1)
 df.scen.2.final <- net.flow(df.scen.2)
 df.scen.3.final <- net.flow(df.scen.3)
 df.scen.4.final <- net.flow(df.scen.4)
+
+
+
+
 
 ### Weather
 
@@ -670,6 +680,15 @@ raw_to_flows <- function(input_csv, output_name){
   write.csv(df.scen.4.final,paste(output_name, "_filter_agg_scen4.csv", sep=""))
 }
   
+
+
+
+
+
+
+
+
+
 # raw_to_flows("201509-hubway-tripdata.csv", "sept15")
 # 
 # raw_to_flows("201609-hubway-tripdata.csv", "sept16")
@@ -678,38 +697,64 @@ raw_to_flows <- function(input_csv, output_name){
 
 # raw_to_flows("201809-bluebikes-tripdata.csv", "sept18")
 
-raw_to_flows("201501-hubway-tripdata.csv", "jan15")
-raw_to_flows("201502-hubway-tripdata.csv", "feb15")
-raw_to_flows("201503-hubway-tripdata.csv", "mar15")
+# Run this for may jun July
+
+# Figure this out!!!
+
 raw_to_flows("201505-hubway-tripdata.csv", "may15")
+raw_to_flows("201506-hubway-tripdata.csv", "jun15")
+raw_to_flows("201507-hubway-tripdata.csv", "jul15")
+raw_to_flows("201509-hubway-tripdata.csv", "sep15")
 
-raw_to_flows("201601-hubway-tripdata.csv", "jan16")
-raw_to_flows("201602-hubway-tripdata.csv", "feb16")
-raw_to_flows("201603-hubway-tripdata.csv", "mar16")
 raw_to_flows("201605-hubway-tripdata.csv", "may16")
+raw_to_flows("201606-hubway-tripdata.csv", "jun16")
+raw_to_flows("201607-hubway-tripdata.csv", "jul16")
+raw_to_flows("201609-hubway-tripdata.csv", "sep16")
 
-raw_to_flows("201701-hubway-tripdata.csv", "jan17")
-raw_to_flows("201702-hubway-tripdata.csv", "feb17")
-raw_to_flows("201703-hubway-tripdata.csv", "mar17")
 raw_to_flows("201705-hubway-tripdata.csv", "may17")
+raw_to_flows("201706-hubway-tripdata.csv", "jun17")
+raw_to_flows("201707-hubway-tripdata.csv", "jul17")
+raw_to_flows("201709-hubway-tripdata.csv", "sep17")
 
-raw_to_flows("201801_hubway_tripdata.csv", "jan18")
-raw_to_flows("201802_hubway_tripdata.csv", "feb18")
-raw_to_flows("201803_hubway_tripdata.csv", "mar18")
 raw_to_flows("201805-bluebikes-tripdata.csv", "may18")
+raw_to_flows("201806-bluebikes-tripdata.csv", "jun18")
+raw_to_flows("201807-bluebikes-tripdata.csv", "jul18")
+raw_to_flows("201809-bluebikes-tripdata.csv", "sep18")
 
-raw_to_flows("201901-bluebikes-tripdata.csv", "jan19")
-raw_to_flows("201902-bluebikes-tripdata.csv", "feb19")
-raw_to_flows("201903-bluebikes-tripdata.csv", "mar19")
 raw_to_flows("201905-bluebikes-tripdata.csv", "may19")
+raw_to_flows("201906-bluebikes-tripdata.csv", "jun19")
+raw_to_flows("201907-bluebikes-tripdata.csv", "jul19")
+raw_to_flows("201909-bluebikes-tripdata.csv", "sep19")
 
-## For the scenarios
+# Checking it went well
 
-sept2015 = read.csv("sept15_filter_agg_scen1.csv")
-sept2016 = read.csv("sept16_filter_agg_scen1.csv")
-sept2017 = read.csv("sept17_filter_agg_scen1.csv")
-sept2018 = read.csv("sept18_filter_agg_scen1.csv")
-sept2019 = read.csv("sept19_filter_agg_scen1.csv")
+path_to_directory_output <- "/Users/victorjouault/Desktop/MIT/Courses/15.072 - A. Edge/A. Edge Project/MIT-15.072-Bike-Rebalancing/Ani_Output"
+setwd(path_to_directory_output)
+
+may2015 = read.csv("may15_filter_agg_scen1.csv")
+may2016 = read.csv("may16_filter_agg_scen1.csv")
+may2017 = read.csv("may17_filter_agg_scen1.csv")
+may2018 = read.csv("may18_filter_agg_scen1.csv")
+may2019 = read.csv("may19_filter_agg_scen1.csv")
+
+jun2015 = read.csv("jun15_filter_agg_scen1.csv")
+jun2016 = read.csv("jun16_filter_agg_scen1.csv")
+jun2017 = read.csv("jun17_filter_agg_scen1.csv")
+jun2018 = read.csv("jun18_filter_agg_scen1.csv")
+jun2019 = read.csv("jun19_filter_agg_scen1.csv")
+
+jul2015 = read.csv("jul15_filter_agg_scen1.csv")
+jul2016 = read.csv("jul16_filter_agg_scen1.csv")
+jul2017 = read.csv("jul17_filter_agg_scen1.csv")
+jul2018 = read.csv("jul18_filter_agg_scen1.csv")
+jul2019 = read.csv("jul19_filter_agg_scen1.csv")
+
+sep2015 = read.csv("sep15_filter_agg_scen1.csv")
+sep2016 = read.csv("sep16_filter_agg_scen1.csv")
+sep2017 = read.csv("sep17_filter_agg_scen1.csv")
+sep2018 = read.csv("sep18_filter_agg_scen1.csv")
+sep2019 = read.csv("sep19_filter_agg_scen1.csv")
+
 
 tot2015 = sum(sept2015$hourly.dep.flow)
 tot2016 = sum(sept2016$hourly.dep.flow)
@@ -750,7 +795,33 @@ print(res21log)
 
 
 
+
 ### Victor: Creating clusters and saving the station file with aggregated stations
+
+rides = read.csv("201501-hubway-tripdata.csv")
+time.int = '1 hour' # Could be for example '15 min'
+
+#### Filtering Datset Work ####
+
+# Loading station dataset
+
+## Reading in
+df <- rides %>% mutate(starttime = as.POSIXct(starttime),
+                              stoptime = as.POSIXct(stoptime),
+                              gender = as.factor(gender),
+                              start.year = as.integer(format(starttime, "%Y")),
+                              start.month = as.integer(format(starttime, "%m")),
+                              start.day.of.month = as.integer(format(starttime, "%d")),
+                              start.day.of.week = as.integer(format(starttime, "%w")),
+                              start.hour = as.integer(format(starttime, "%H")),
+                              start.min = as.integer(format(starttime, "%M")),
+                              start.time.of.day = start.hour + (start.min/60), 
+                              start.quarter = as.integer(start.time.of.day*4)/4,
+                              .keep = "unused",
+                              start.station.latitude = as.numeric(start.station.latitude),
+                              start.station.longitude = as.numeric(start.station.longitude),
+                              end.station.latitude = as.numeric(end.station.latitude),
+                              end.station.longitude = as.numeric(end.station.longitude))
 
 stations = read.csv("current_bluebikes_stations.csv", skip = 1)
 stations = stations[2:dim(stations)[1],] %>% rename(docks = 'Total.docks') %>%
@@ -797,8 +868,7 @@ leaflet(stations %>% group_by(area) %>%
   )
 
 # write.csv(stations,'preprocessed_stations.csv')
-# stations = read.csv('preprocessed_stations.csv')
-
+stations = read.csv('preprocessed_stations.csv')
 
 
 # Exploration
@@ -816,6 +886,28 @@ leaflet(df.flows %>% merge(pure_stat, by.x = 'start.area', by.y = 'area') %>%
   )
 
 
+
+
+
+
+
+
+
+
+df <- tibble(
+  group = c(1:2, 1),
+  item_id = c(1:2, 2),
+  item_name = c("a", "b", "b"),
+  value1 = 1:3,
+  value2 = 4:6
+)
+df
+df %>% complete(group = 1:3, item_id = 1:3)
+df %>% complete(group, nesting(item_id, item_name))
+
+# You can also choose to fill in missing values
+df %>% complete(group, nesting(item_id, item_name), fill = list(value1 = 0))
+# }
 
 
 

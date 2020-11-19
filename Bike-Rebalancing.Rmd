@@ -844,34 +844,143 @@ network_map
 
 
 
+
+
+# Linear regression for prediction in Sept 2019
+
 ```{r}
-r_colors <- rgb(t(col2rgb(colors()) / 255))
-names(r_colors) <- colors()
+year_data <- read_csv("main_result.csv")
+year_data <- year_data %>%
+  mutate(Year = as.numeric(substr(Month, 4,5)), Month = as.factor(substr(Month, 1,3))) %>%
+  select(Year, Month, Min_Bikes) %>%
+  spread(Month, Min_Bikes)
+print(year_data)
 
-ui <- fluidPage(
-  leafletOutput("mymap"),
-  p(),
-  # actionButton("recalc", "New points")
-)
+ggplot(data = year_data %>% gather(actual_month, num_bikes, -c(Year, sep))) +
+  geom_point(aes(x=num_bikes, y=sep, color=actual_month)) +
+  theme_bw() +
+  ylab("") +
+  theme(axis.title=element_text(size=10), axis.text=element_text(size=10),
+        legend.title=element_text(size=10),
+        legend.text=element_text(size=12))
+```
 
-server <- function(input, output, session) {
+```{r}
+library(corrplot)
+corrplot(cor(year_data %>% select(-Year)), type = "upper", 
+         tl.col = "black", tl.srt = 30, tl.cex=0.6)
+```
 
+
+```{r}
+lmod = lm(sep~ may + jul , data=year_data %>% filter(Year <= 18))
+summary(lmod)
+
+year_data$pred_sep <- predict(lmod, newdata=year_data)
+
+print(year_data)
+ggplot(data = year_data %>% select(Year,jul, sep, pred_sep) %>% 
+         gather(key = pred, value = num_bikes, -c(Year, jul))) +
+  geom_point(aes(x=jul, y=num_bikes, color = pred)) +
+  theme_bw() +
+  ylab("Minimum number of bikes in September") +
+  xlab("Post-information minimum number of bikes in July") +
+  theme(axis.title=element_text(size=10), axis.text=element_text(size=10),
+        legend.title=element_text(size=10),
+        legend.text=element_text(size=12)) +
+  xlim(0,700) +
+  ylim(0,700)
+```
+
+
+
+# Creating synthetic dataset for showcase of predictions
+
+```{r}
+orig_pred = read_csv("df_prediction_original.csv") %>% arrange(weekday, hour.of.day, start.area, end.area)
+
+orig_pred_06 = read_csv("df_prediction_original.csv") %>% filter(hour.of.day < 6)
+orig_pred_612 = read_csv("df_prediction_original.csv") %>% filter(hour.of.day >= 6 & hour.of.day < 12)
+orig_pred_1218 = read_csv("df_prediction_original.csv") %>% filter(hour.of.day >= 12 & hour.of.day < 18)
+orig_pred_1824 = read_csv("df_prediction_original.csv") %>% filter(hour.of.day >= 18)
+
+synth_scen <- function(weekday, q.temp, q.hmd, q.drct, q.wind, q.pcpt, q.press, q.vis, q.gust){
+  synth_pred = data.frame(matrix(ncol = 16, nrow = 0))
+  colnames(synth_pred) = colnames(orig_pred)
   
-
-  output$mymap <- renderLeaflet({
-    leaflet(cum.bike.dep.arr) %>%
-      setView(lng = -71.0589, lat = 42.3601, zoom = 12) %>%
-      addProviderTiles(providers$CartoDB.Positron) %>%
-          addCircleMarkers(
-            radius = ~value/75,
-            color = ~pal(key),
-            opacity = ~.5,
-            popup = ~station
-      )
-  })
+  synth_pred_06 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 0:5) %>%
+    mutate(weekday = 0,
+           avg.temp = quantile(orig_pred_06$avg.temp, q.temp),
+           avg.hmd = quantile(orig_pred_06$avg.hmd, q.hmd),
+           avg.drct = quantile(orig_pred_06$avg.drct, q.drct),
+           avg.wind = quantile(orig_pred_06$avg.wind, q.wind),
+           sum.pcpt = quantile(orig_pred_06$sum.pcpt, q.pcpt),
+           avg.press = quantile(orig_pred_06$avg.press, q.press),
+           avg.vis = quantile(orig_pred_06$avg.vis, q.vis),
+           max.gust = quantile(orig_pred_06$max.gust, q.gust)
+           )
+  
+  synth_pred_612 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 6:11) %>%
+    mutate(weekday = 0,
+           avg.temp = quantile(orig_pred_612$avg.temp, q.temp),
+           avg.hmd = quantile(orig_pred_612$avg.hmd, q.hmd),
+           avg.drct = quantile(orig_pred_612$avg.drct, q.drct),
+           avg.wind = quantile(orig_pred_612$avg.wind, q.wind),
+           sum.pcpt = quantile(orig_pred_612$sum.pcpt, q.pcpt),
+           avg.press = quantile(orig_pred_612$avg.press, q.press),
+           avg.vis = quantile(orig_pred_612$avg.vis, q.vis),
+           max.gust = quantile(orig_pred_612$max.gust, q.gust)
+           )
+  
+  synth_pred_1218 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 12:17) %>%
+    mutate(weekday = 0,
+           avg.temp = quantile(orig_pred_1218$avg.temp, q.temp),
+           avg.hmd = quantile(orig_pred_1218$avg.hmd, q.hmd),
+           avg.drct = quantile(orig_pred_1218$avg.drct, q.drct),
+           avg.wind = quantile(orig_pred_1218$avg.wind, q.wind),
+           sum.pcpt = quantile(orig_pred_1218$sum.pcpt, q.pcpt),
+           avg.press = quantile(orig_pred_1218$avg.press, q.press),
+           avg.vis = quantile(orig_pred_1218$avg.vis, q.vis),
+           max.gust = quantile(orig_pred_1218$max.gust, q.gust)
+           )
+  
+  synth_pred_1824 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 18:23) %>%
+    mutate(weekday = 0,
+           avg.temp = quantile(orig_pred_1824$avg.temp, q.temp),
+           avg.hmd = quantile(orig_pred_1824$avg.hmd, q.hmd),
+           avg.drct = quantile(orig_pred_1824$avg.drct, q.drct),
+           avg.wind = quantile(orig_pred_1824$avg.wind, q.wind),
+           sum.pcpt = quantile(orig_pred_1824$sum.pcpt, q.pcpt),
+           avg.press = quantile(orig_pred_1824$avg.press, q.press),
+           avg.vis = quantile(orig_pred_1824$avg.vis, q.vis),
+           max.gust = quantile(orig_pred_1824$max.gust, q.gust)
+           )
+  
+  synth_pred = rbind(synth_pred_06,synth_pred_612, synth_pred_1218, synth_pred_1824)
+  
+  synth_pred
 }
 
-shinyApp(ui, server)
+synth_pred1 <- synth_scen(weekday = 0, q.temp = 0.9, 
+                          q.hmd = 0.1, q.drct = 0.5 , q.wind = 0.1, q.pcpt = 0.1, 
+                          q.press = 0.9, q.vis = 0.9, q.gust = 0.1)
+
+synth_pred2 <- synth_scen(weekday = 0, q.temp = 0.1, 
+                          q.hmd = 0.9, q.drct = 0.1 , q.wind = 0.9, q.pcpt = 0.9, 
+                          q.press = 0.1, q.vis = 0.2, q.gust = 0.8)
+
+synth_pred3 <- synth_scen(weekday = 5, q.temp = 0.9, 
+                          q.hmd = 0.1, q.drct = 0.5 , q.wind = 0.1, q.pcpt = 0.1, 
+                          q.press = 0.9, q.vis = 0.9, q.gust = 0.1)
+
+synth_pred4 <- synth_scen(weekday = 5, q.temp = 0.1, 
+                          q.hmd = 0.9, q.drct = 0.1 , q.wind = 0.9, q.pcpt = 0.9, 
+                          q.press = 0.1, q.vis = 0.2, q.gust = 0.8)
+
+write.csv(synth_pred1,'synth_pred1.csv')
+write.csv(synth_pred2,'synth_pred2.csv')
+write.csv(synth_pred3,'synth_pred3.csv')
+write.csv(synth_pred4,'synth_pred4.csv')
 ```
 
 
@@ -883,8 +992,63 @@ shinyApp(ui, server)
 
 
 
+Sample code
+```{r}
+synth_pred = data.frame(matrix(ncol = 16, nrow = 0))
+colnames(synth_pred) = colnames(orig_pred)
 
+# Fake day 1: Monday, sunny, low wind
 
+synth_pred1_06 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 0:5) %>%
+  mutate(weekday = 0,
+         avg.temp = quantile(orig_pred_06$avg.temp, 0.9),
+         avg.hmd = quantile(orig_pred_06$avg.hmd, 0.1),
+         avg.drct = quantile(orig_pred_06$avg.drct, 0.5),
+         avg.wind = quantile(orig_pred_06$avg.wind, 0.1),
+         sum.pcpt = quantile(orig_pred_06$sum.pcpt, 0.01),
+         avg.press = quantile(orig_pred_06$avg.press, 0.9),
+         avg.vis = quantile(orig_pred_06$avg.vis, 0.9),
+         max.gust = quantile(orig_pred_06$max.gust, 0.1)
+         )
+
+synth_pred1_612 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 6:11) %>%
+  mutate(weekday = 0,
+         avg.temp = quantile(orig_pred_612$avg.temp, 0.9),
+         avg.hmd = quantile(orig_pred_612$avg.hmd, 0.1),
+         avg.drct = quantile(orig_pred_612$avg.drct, 0.5),
+         avg.wind = quantile(orig_pred_612$avg.wind, 0.1),
+         sum.pcpt = quantile(orig_pred_612$sum.pcpt, 0.01),
+         avg.press = quantile(orig_pred_612$avg.press, 0.9),
+         avg.vis = quantile(orig_pred_612$avg.vis, 0.9),
+         max.gust = quantile(orig_pred_612$max.gust, 0.1)
+         )
+
+synth_pred1_1218 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 12:17) %>%
+  mutate(weekday = 0,
+         avg.temp = quantile(orig_pred_1218$avg.temp, 0.9),
+         avg.hmd = quantile(orig_pred_1218$avg.hmd, 0.1),
+         avg.drct = quantile(orig_pred_1218$avg.drct, 0.5),
+         avg.wind = quantile(orig_pred_1218$avg.wind, 0.1),
+         sum.pcpt = quantile(orig_pred_1218$sum.pcpt, 0.01),
+         avg.press = quantile(orig_pred_1218$avg.press, 0.9),
+         avg.vis = quantile(orig_pred_1218$avg.vis, 0.9),
+         max.gust = quantile(orig_pred_1218$max.gust, 0.1)
+         )
+
+synth_pred1_1824 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 18:23) %>%
+  mutate(weekday = 0,
+         avg.temp = quantile(orig_pred_1824$avg.temp, 0.9),
+         avg.hmd = quantile(orig_pred_1824$avg.hmd, 0.1),
+         avg.drct = quantile(orig_pred_1824$avg.drct, 0.5),
+         avg.wind = quantile(orig_pred_1824$avg.wind, 0.1),
+         sum.pcpt = quantile(orig_pred_1824$sum.pcpt, 0.01),
+         avg.press = quantile(orig_pred_1824$avg.press, 0.9),
+         avg.vis = quantile(orig_pred_1824$avg.vis, 0.9),
+         max.gust = quantile(orig_pred_1824$max.gust, 0.1)
+         )
+
+synth_pred1 = rbind(synth_pred1_06,synth_pred1_612, synth_pred1_1218, synth_pred1_1824)
+```
 
 
 
