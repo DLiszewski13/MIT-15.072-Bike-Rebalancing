@@ -886,6 +886,14 @@ leaflet(df.flows %>% merge(pure_stat, by.x = 'start.area', by.y = 'area') %>%
   )
 
 
+leaflet(pure_stat %>% filter(area == 24 | area == 44)) %>%
+  setView(lng = -71.0589, lat = 42.3601, zoom = 12) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers(
+    lat = ~Latitude.area,
+    lng = ~Longitude.area,
+    popup = ~as.character(area)
+  )
 
 
 
@@ -894,20 +902,6 @@ leaflet(df.flows %>% merge(pure_stat, by.x = 'start.area', by.y = 'area') %>%
 
 
 
-df <- tibble(
-  group = c(1:2, 1),
-  item_id = c(1:2, 2),
-  item_name = c("a", "b", "b"),
-  value1 = 1:3,
-  value2 = 4:6
-)
-df
-df %>% complete(group = 1:3, item_id = 1:3)
-df %>% complete(group, nesting(item_id, item_name))
-
-# You can also choose to fill in missing values
-df %>% complete(group, nesting(item_id, item_name), fill = list(value1 = 0))
-# }
 
 
 

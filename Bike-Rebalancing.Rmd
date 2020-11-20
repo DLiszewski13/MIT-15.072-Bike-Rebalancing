@@ -898,18 +898,20 @@ ggplot(data = year_data %>% select(Year,jul, sep, pred_sep) %>%
 
 ```{r}
 orig_pred = read_csv("df_prediction_original.csv") %>% arrange(weekday, hour.of.day, start.area, end.area)
+df_test1 = read_csv("sep19_filter_agg_scen1.csv") %>% filter(Day == 6)
+sum(df_test1$dep_flow)
 
 orig_pred_06 = read_csv("df_prediction_original.csv") %>% filter(hour.of.day < 6)
 orig_pred_612 = read_csv("df_prediction_original.csv") %>% filter(hour.of.day >= 6 & hour.of.day < 12)
 orig_pred_1218 = read_csv("df_prediction_original.csv") %>% filter(hour.of.day >= 12 & hour.of.day < 18)
 orig_pred_1824 = read_csv("df_prediction_original.csv") %>% filter(hour.of.day >= 18)
 
-synth_scen <- function(weekday, q.temp, q.hmd, q.drct, q.wind, q.pcpt, q.press, q.vis, q.gust){
+synth_scen <- function(weekday1, q.temp, q.hmd, q.drct, q.wind, q.pcpt, q.press, q.vis, q.gust){
   synth_pred = data.frame(matrix(ncol = 16, nrow = 0))
   colnames(synth_pred) = colnames(orig_pred)
   
   synth_pred_06 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 0:5) %>%
-    mutate(weekday = 0,
+    mutate(weekday = weekday1,
            avg.temp = quantile(orig_pred_06$avg.temp, q.temp),
            avg.hmd = quantile(orig_pred_06$avg.hmd, q.hmd),
            avg.drct = quantile(orig_pred_06$avg.drct, q.drct),
@@ -921,7 +923,7 @@ synth_scen <- function(weekday, q.temp, q.hmd, q.drct, q.wind, q.pcpt, q.press, 
            )
   
   synth_pred_612 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 6:11) %>%
-    mutate(weekday = 0,
+    mutate(weekday = weekday1,
            avg.temp = quantile(orig_pred_612$avg.temp, q.temp),
            avg.hmd = quantile(orig_pred_612$avg.hmd, q.hmd),
            avg.drct = quantile(orig_pred_612$avg.drct, q.drct),
@@ -933,7 +935,7 @@ synth_scen <- function(weekday, q.temp, q.hmd, q.drct, q.wind, q.pcpt, q.press, 
            )
   
   synth_pred_1218 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 12:17) %>%
-    mutate(weekday = 0,
+    mutate(weekday = weekday1,
            avg.temp = quantile(orig_pred_1218$avg.temp, q.temp),
            avg.hmd = quantile(orig_pred_1218$avg.hmd, q.hmd),
            avg.drct = quantile(orig_pred_1218$avg.drct, q.drct),
@@ -945,7 +947,7 @@ synth_scen <- function(weekday, q.temp, q.hmd, q.drct, q.wind, q.pcpt, q.press, 
            )
   
   synth_pred_1824 <- synth_pred %>% complete(start.area = 1:50, end.area = 1:50, hour.of.day = 18:23) %>%
-    mutate(weekday = 0,
+    mutate(weekday = weekday1,
            avg.temp = quantile(orig_pred_1824$avg.temp, q.temp),
            avg.hmd = quantile(orig_pred_1824$avg.hmd, q.hmd),
            avg.drct = quantile(orig_pred_1824$avg.drct, q.drct),
@@ -973,7 +975,7 @@ synth_pred3 <- synth_scen(weekday = 5, q.temp = 0.9,
                           q.hmd = 0.1, q.drct = 0.5 , q.wind = 0.1, q.pcpt = 0.1, 
                           q.press = 0.9, q.vis = 0.9, q.gust = 0.1)
 
-synth_pred4 <- synth_scen(weekday = 5, q.temp = 0.1, 
+synth_pred4 <- synth_scen(weekday = 5, q.temp = 0.1,
                           q.hmd = 0.9, q.drct = 0.1 , q.wind = 0.9, q.pcpt = 0.9, 
                           q.press = 0.1, q.vis = 0.2, q.gust = 0.8)
 
@@ -982,6 +984,29 @@ write.csv(synth_pred2,'synth_pred2.csv')
 write.csv(synth_pred3,'synth_pred3.csv')
 write.csv(synth_pred4,'synth_pred4.csv')
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
