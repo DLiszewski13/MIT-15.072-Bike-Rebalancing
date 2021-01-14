@@ -3,7 +3,9 @@
 This project was conducted during the MIT 15.072 Analytics Edge course (Fall 2020).
 
 Executive Summary:
+
 Deployment Strategy for e-Scooters in Boston
+
 David Liszewski, Victor Jouault, Tristan Breyer, Aniruddh Hari
 
 Boston is a major US city that currently has laws that ban e-Scooter travel. Upon their expected repeal, we propose having a market entrance and deployment strategy for an e-Scooter fleet based on the usage of the popular shared-bikes system in the city, Bluebikes. A region in the heart of Boston and Cambridge was identified for market entrance, as its size and demographic patterns matched the profile of e-Scooter users in other major cities. Given the dockless nature of e-Scooters, we found 50 hotspots to act as the deployment zones in this region by aggregating the flow of travel at the nearby bike stations. 
